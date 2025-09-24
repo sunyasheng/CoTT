@@ -1,1 +1,1 @@
-python /Users/suny0a/Proj/CoTT/scripts/data_crawler.py --query "cat:cs" --max-total-bytes 1000000 --out-dir ./arxiv_pdfs --concurrency 8 --download-delay 0.3 --resume
+python scripts/data_crawler.py --query "cat:cs" --max-total-bytes 1000000 --out-dir ./arxiv_pdfs --concurrency 8 --download-delay 0.3 --resume
