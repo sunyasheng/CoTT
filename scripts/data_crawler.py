@@ -147,7 +147,7 @@ def save_manifest_line(manifest_path: str, record: dict) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def download_pdf(arxiv_id: str, out_dir: str, session: requests.Session, timeout: int, max_retries: int, backoff: float) -> Tuple[str, bool, int, Optional[str]]:
+def download_pdf(arxiv_id: str, out_dir: str, session: requests.Session, timeout: int, max_retries: int, backoff: float, min_pdf_bytes: int = 0) -> Tuple[str, bool, int, Optional[str]]:
     url = id_to_pdf_url(arxiv_id)
     filename = id_to_filename(arxiv_id)
     out_path = os.path.join(out_dir, filename)
@@ -155,20 +155,44 @@ def download_pdf(arxiv_id: str, out_dir: str, session: requests.Session, timeout
     if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
         return out_path, True, os.path.getsize(out_path), None
 
-    headers = {"User-Agent": USER_AGENT}
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+    }
     for attempt in range(1, max_retries + 1):
         try:
             with session.get(url, headers=headers, timeout=timeout, stream=True) as r:
                 if r.status_code == 404:
                     return out_path, False, 0, "404 Not Found"
                 r.raise_for_status()
+                content_type = (r.headers.get("Content-Type") or "").lower()
                 tmp_path = out_path + ".part"
+                first_bytes = b""
                 with open(tmp_path, "wb") as f:
                     for chunk in r.iter_content(chunk_size=1024 * 64):
-                        if chunk:
-                            f.write(chunk)
+                        if not chunk:
+                            continue
+                        if not first_bytes:
+                            first_bytes = chunk[:8]
+                        f.write(chunk)
                 os.replace(tmp_path, out_path)
-                return out_path, True, os.path.getsize(out_path), None
+                size_bytes = os.path.getsize(out_path)
+                # Validate PDF: content-type or magic header and minimum size
+                is_pdf_header = first_bytes.startswith(b"%PDF-")
+                is_pdf_ct = "application/pdf" in content_type
+                if not (is_pdf_header or is_pdf_ct):
+                    try:
+                        os.remove(out_path)
+                    except OSError:
+                        pass
+                    return out_path, False, 0, f"Non-PDF response (Content-Type={content_type})"
+                if min_pdf_bytes and size_bytes < min_pdf_bytes:
+                    try:
+                        os.remove(out_path)
+                    except OSError:
+                        pass
+                    return out_path, False, 0, f"File too small ({size_bytes} < {min_pdf_bytes})"
+                return out_path, True, size_bytes, None
         except Exception as e:
             if attempt == max_retries:
                 return out_path, False, 0, str(e)
@@ -217,6 +241,7 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=45, help="HTTP timeout seconds per request")
     parser.add_argument("--retries", type=int, default=3, help="Max download retries per file")
     parser.add_argument("--backoff", type=float, default=1.0, help="Base backoff seconds between retries")
+    parser.add_argument("--min-pdf-bytes", type=int, default=50000, help="Treat files smaller than this as failed (likely HTML stubs)")
     parser.add_argument("--page-size", type=int, default=100, help="arXiv API page size (<=2000)")
     parser.add_argument("--page-delay", type=float, default=3.0, help="Delay seconds between API pages")
     parser.add_argument("--download-delay", type=float, default=1.0, help="Polite delay seconds between task submissions")
@@ -260,6 +285,7 @@ def main() -> int:
             args.timeout,
             args.retries,
             args.backoff,
+            args.min_pdf_bytes,
         )
         active_futures.add(fut)
         futures_to_id[fut] = e
