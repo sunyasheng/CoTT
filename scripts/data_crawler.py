@@ -245,7 +245,7 @@ def main() -> int:
 
     # Thread pool for downloads
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.concurrency))
-    futures: List[concurrent.futures.Future] = []
+    active_futures: set = set()
     futures_to_id: dict = {}
 
     def submit_download(e: ArxivEntry):
@@ -260,10 +260,45 @@ def main() -> int:
             args.retries,
             args.backoff,
         )
-        futures.append(fut)
+        active_futures.add(fut)
         futures_to_id[fut] = e
 
+    def process_future(fut: concurrent.futures.Future) -> bool:
+        nonlocal total_ok, total_fail, total_downloaded_bytes
+        entry = futures_to_id.pop(fut)
+        out_path, ok, size, err = fut.result()
+        if ok:
+            total_ok += 1
+            total_downloaded_bytes += size
+            save_manifest_line(
+                manifest_path,
+                {
+                    "arxiv_id": entry.arxiv_id,
+                    "title": entry.title,
+                    "published": entry.published,
+                    "path": os.path.abspath(out_path),
+                    "size": size,
+                    "status": "ok",
+                },
+            )
+        else:
+            total_fail += 1
+            save_manifest_line(
+                manifest_path,
+                {
+                    "arxiv_id": entry.arxiv_id,
+                    "title": entry.title,
+                    "published": entry.published,
+                    "path": os.path.abspath(out_path),
+                    "size": size,
+                    "status": "error",
+                    "error": err,
+                },
+            )
+        return ok
+
     try:
+        stop_discovery = False
         for entry in discover_ids(
             query=args.query,
             from_date=args.from_date,
@@ -276,45 +311,27 @@ def main() -> int:
                 continue
 
             if args.max_total_bytes is not None and total_downloaded_bytes >= args.max_total_bytes:
+                stop_discovery = True
                 break
+
+            # Respect concurrency by waiting for at least one to finish if saturated
+            if len(active_futures) >= args.concurrency:
+                done_one = next(concurrent.futures.as_completed(active_futures))
+                active_futures.remove(done_one)
+                process_future(done_one)
+                if args.max_total_bytes is not None and total_downloaded_bytes >= args.max_total_bytes:
+                    stop_discovery = True
+                    break
 
             submit_download(entry)
             time.sleep(args.download_delay)
 
-        for fut in concurrent.futures.as_completed(futures):
-            entry = futures_to_id[fut]
-            out_path, ok, size, err = fut.result()
-            if ok:
-                total_ok += 1
-                total_downloaded_bytes += size
-                save_manifest_line(
-                    manifest_path,
-                    {
-                        "arxiv_id": entry.arxiv_id,
-                        "title": entry.title,
-                        "published": entry.published,
-                        "path": os.path.abspath(out_path),
-                        "size": size,
-                        "status": "ok",
-                    },
-                )
-            else:
-                total_fail += 1
-                save_manifest_line(
-                    manifest_path,
-                    {
-                        "arxiv_id": entry.arxiv_id,
-                        "title": entry.title,
-                        "published": entry.published,
-                        "path": os.path.abspath(out_path),
-                        "size": size,
-                        "status": "error",
-                        "error": err,
-                    },
-                )
-
-            if args.max_total_bytes is not None and total_downloaded_bytes >= args.max_total_bytes:
-                break
+        if not stop_discovery:
+            # Discovery exhausted; drain remaining futures
+            for fut in concurrent.futures.as_completed(active_futures):
+                process_future(fut)
+                if args.max_total_bytes is not None and total_downloaded_bytes >= args.max_total_bytes:
+                    break
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
         session.close()
