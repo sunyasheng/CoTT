@@ -72,10 +72,11 @@ def build_search_query(query: str, from_date: Optional[str], until_date: Optiona
 
         start = compact(from_date) or "00010101"
         end = compact(until_date) or "99991231"
-        date_clause = f"submittedDate:[{start}+TO+{end}]"
+        # Use spaces; requests will encode them. Avoid '+' which some servers don't treat as space inside ranges
+        date_clause = f"submittedDate:[{start} TO {end}]"
 
     if query and date_clause:
-        return f"({query})+AND+{date_clause}"
+        return f"({query}) AND {date_clause}"
     elif date_clause:
         return date_clause
     else:
