@@ -244,7 +244,7 @@ def main() -> int:
     parser.add_argument("--min-pdf-bytes", type=int, default=50000, help="Treat files smaller than this as failed (likely HTML stubs)")
     parser.add_argument("--page-size", type=int, default=100, help="arXiv API page size (<=2000)")
     parser.add_argument("--page-delay", type=float, default=3.0, help="Delay seconds between API pages")
-    parser.add_argument("--download-delay", type=float, default=1.0, help="Polite delay seconds between task submissions")
+    parser.add_argument("--download-delay", type=float, default=0.7, help="Polite delay seconds between task submissions (jittered)")
     parser.add_argument("--resume", action="store_true", help="Skip files already present and recorded in manifest")
     args = parser.parse_args()
 
@@ -351,7 +351,9 @@ def main() -> int:
                     break
 
             submit_download(entry)
-            time.sleep(args.download_delay)
+            # Add random jitter to be more polite and avoid synchronized bursts
+            base_delay = args.download_delay if args.download_delay > 0 else 0
+            time.sleep(base_delay + (random.uniform(0, base_delay) if base_delay > 0 else 0))
 
         if not stop_discovery:
             # Discovery exhausted; drain remaining futures
