@@ -109,11 +109,11 @@ def filter_snapshot(
         for pid in paper_ids:
             f.write(pid + "\n")
 
-    # Write metadata table
+    # Write metadata table (use openpyxl to avoid xlsxwriter URL auto-link warnings)
     df = pd.DataFrame(rows)
     xlsx_path = output_dir / "filtered_papers_metadata.xlsx"
-    # engine auto-detected with openpyxl installed
-    df.to_excel(xlsx_path, index=False)
+    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
 
     print("✅ Filter complete")
     print(f"   📄 IDs: {ids_path}")
