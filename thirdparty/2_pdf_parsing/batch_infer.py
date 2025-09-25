@@ -1,20 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import List
-
-try:
-    from magic_pdf.data.data_reader_writer import FileBasedDataWriter, FileBasedDataReader
-    from magic_pdf.data.dataset import PymuDocDataset
-    from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
-    from magic_pdf.config.enums import SupportedPdfParseMethod
-except ImportError as e:
-    print(f"Error importing magic_pdf modules: {e}")
-    print("Please install MinerU with: pip install -U magic-pdf[full] --extra-index-url https://wheels.myhloli.com")
-    sys.exit(1)
 
 
 def find_pdfs(root_dir: Path) -> List[Path]:
@@ -26,51 +16,43 @@ def find_pdfs(root_dir: Path) -> List[Path]:
     return pdfs
 
 
-def process_pdf_with_api(pdf_path: Path, out_dir: Path) -> bool:
-    """Process a single PDF using MinerU Python API"""
+def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
+    """Process multiple PDFs in a single MinerU CLI call to avoid model reloading"""
     try:
-        name_without_suff = pdf_path.stem
-        per_pdf_out = out_dir / name_without_suff
-        per_pdf_out.mkdir(parents=True, exist_ok=True)
-        
-        # Set up directories
-        local_image_dir = per_pdf_out / "images"
-        local_md_dir = per_pdf_out
-        local_image_dir.mkdir(exist_ok=True)
-        
-        # Initialize data readers/writers
-        image_writer = FileBasedDataWriter(local_image_dir)
-        md_writer = FileBasedDataWriter(local_md_dir)
-        reader = FileBasedDataReader("")
-        
-        # Read PDF file
-        pdf_bytes = reader.read(str(pdf_path))
-        
-        # Create dataset and process
-        ds = PymuDocDataset(pdf_bytes)
-        
-        # Determine processing method and apply analysis
-        if ds.classify() == SupportedPdfParseMethod.OCR:
-            infer_result = ds.apply(doc_analyze, ocr=True)
-            pipe_result = infer_result.pipe_ocr_mode(image_writer)
-        else:
-            infer_result = ds.apply(doc_analyze, ocr=False)
-            pipe_result = infer_result.pipe_txt_mode(image_writer)
-        
-        # Save results
-        infer_result.draw_model(local_md_dir / f"{name_without_suff}_model.pdf")
-        
-        md_content = pipe_result.get_markdown(local_image_dir)
-        pipe_result.dump_md(md_writer, f"{name_without_suff}.md", local_image_dir)
-        
-        content_list_content = pipe_result.get_content_list(local_image_dir)
-        pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json", local_image_dir)
-        
-        return True
+        # Create a temporary directory for this batch
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_pdf_dir = Path(temp_dir) / "pdfs"
+            temp_pdf_dir.mkdir()
+            
+            # Copy PDFs to temp directory
+            for pdf_path in pdf_paths:
+                import shutil
+                shutil.copy2(pdf_path, temp_pdf_dir / pdf_path.name)
+            
+            # Use MinerU CLI command on the directory
+            cmd = [
+                "mineru",
+                "-p", str(temp_pdf_dir),
+                "-o", str(out_dir),
+                "--backend", "vlm-vllm-engine",
+                "--device", "cuda",
+                "--max-num-seqs", "8",
+                "--max-model-len", "12288",
+                "--gpu-memory-utilization", "0.10"
+            ]
+            
+            print(f"Processing batch of {len(pdf_paths)} PDFs with single model load...")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"MinerU CLI failed for batch: {result.stderr}", file=sys.stderr)
+                return len(pdf_paths)  # All failed
+            
+            return 0  # All succeeded
         
     except Exception as e:
-        print(f"Error processing {pdf_path}: {e}", file=sys.stderr)
-        return False
+        print(f"Error processing batch: {e}", file=sys.stderr)
+        return len(pdf_paths)  # All failed
 
 
 def main() -> None:
@@ -111,14 +93,10 @@ def main() -> None:
 
     sel = pdfs[args.start - 1: args.end]
     print(f"Found {len(pdfs)} PDFs; processing indices [{args.start}..{args.end}] -> {len(sel)} files")
-    print("Using MinerU Python API - model will be loaded once and reused for all PDFs")
+    print("Using MinerU CLI with batch processing - model loaded once per batch")
 
-    failures = 0
-    for idx, pdf in enumerate(sel, start=args.start):
-        print(f"[{idx}] Processing: {pdf}")
-        success = process_pdf_with_api(pdf, out_dir)
-        if not success:
-            failures += 1
+    # Process all PDFs in a single batch to avoid model reloading
+    failures = process_pdfs_batch(sel, out_dir)
 
     if failures:
         print(f"Done with {failures} failures.")
