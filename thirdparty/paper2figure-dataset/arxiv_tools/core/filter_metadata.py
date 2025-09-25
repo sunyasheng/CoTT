@@ -9,6 +9,7 @@ Inputs:
 
 Filtering options (optional):
 - --year YEAR                     Only include first-submitted year == YEAR
+- --start_year Y1 --end_year Y2  Include if Y1 <= year <= Y2 (inclusive)
 - --categories cat1,cat2         Comma-separated list; include if any category matches
 - --limit N                       Stop after N records that match
 """
@@ -36,11 +37,19 @@ def parse_year(record: Dict) -> Optional[int]:
     return None
 
 
-def record_matches(record: Dict, year: Optional[int], categories: Optional[List[str]]) -> bool:
+def record_matches(record: Dict, year: Optional[int], categories: Optional[List[str]], start_year: Optional[int] = None, end_year: Optional[int] = None) -> bool:
+    ry = parse_year(record)
     if year is not None:
-        ry = parse_year(record)
         if ry != year:
             return False
+    else:
+        if start_year is not None or end_year is not None:
+            if ry is None:
+                return False
+            if start_year is not None and ry < start_year:
+                return False
+            if end_year is not None and ry > end_year:
+                return False
 
     if categories:
         rec_cats = (record.get("categories") or "").split()
@@ -60,6 +69,8 @@ def filter_snapshot(
     year: Optional[int],
     categories: Optional[List[str]],
     limit: Optional[int],
+    start_year: Optional[int] = None,
+    end_year: Optional[int] = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -80,7 +91,7 @@ def filter_snapshot(
             if not paper_id:
                 continue
 
-            if not record_matches(rec, year, categories):
+            if not record_matches(rec, year, categories, start_year, end_year):
                 continue
 
             pdf_url = build_pdf_url(paper_id)
@@ -126,6 +137,8 @@ def main() -> None:
     parser.add_argument("--snapshot", required=True, help="Path to arxiv-metadata-oai-snapshot.json")
     parser.add_argument("--output", default="./output", help="Output directory (will be created)")
     parser.add_argument("--year", type=int, help="Only include records whose first submission year == YEAR")
+    parser.add_argument("--start_year", type=int, help="Include records with year >= START_YEAR")
+    parser.add_argument("--end_year", type=int, help="Include records with year <= END_YEAR")
     parser.add_argument("--categories", help="Comma-separated list of categories to include (match any)")
     parser.add_argument("--limit", type=int, help="Stop after N matching records")
 
@@ -139,6 +152,8 @@ def main() -> None:
         year=args.year,
         categories=categories,
         limit=args.limit,
+        start_year=args.start_year,
+        end_year=args.end_year,
     )
 
 
