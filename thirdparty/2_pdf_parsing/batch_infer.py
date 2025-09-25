@@ -39,8 +39,8 @@ def process_pdf_with_api(pdf_path: Path, out_dir: Path) -> bool:
         local_image_dir.mkdir(exist_ok=True)
         
         # Initialize data readers/writers
-        image_writer = FileBasedDataWriter(str(local_image_dir))
-        md_writer = FileBasedDataWriter(str(local_md_dir))
+        image_writer = FileBasedDataWriter(local_image_dir)
+        md_writer = FileBasedDataWriter(local_md_dir)
         reader = FileBasedDataReader("")
         
         # Read PDF file
@@ -58,13 +58,13 @@ def process_pdf_with_api(pdf_path: Path, out_dir: Path) -> bool:
             pipe_result = infer_result.pipe_txt_mode(image_writer)
         
         # Save results
-        infer_result.draw_model(str(local_md_dir / f"{name_without_suff}_model.pdf"))
+        infer_result.draw_model(local_md_dir / f"{name_without_suff}_model.pdf")
         
-        md_content = pipe_result.get_markdown(str(local_image_dir))
-        pipe_result.dump_md(md_writer, f"{name_without_suff}.md", str(local_image_dir))
+        md_content = pipe_result.get_markdown(local_image_dir)
+        pipe_result.dump_md(md_writer, f"{name_without_suff}.md", local_image_dir)
         
-        content_list_content = pipe_result.get_content_list(str(local_image_dir))
-        pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json", str(local_image_dir))
+        content_list_content = pipe_result.get_content_list(local_image_dir)
+        pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json", local_image_dir)
         
         return True
         
