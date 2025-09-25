@@ -1,17 +1,14 @@
 
 ## filter the relevant papers
 # python3 thirdparty/paper2figure-dataset/arxiv_tools/core/filter_metadata.py \
-#   --snapshot ./arxiv-metadata-oai-snapshot.json \
-#   --categories cs.CV,cs.LG,cs.AI,cs.CL,cs.HCI \
-#   --year 2025 \
-#   --limit 2000000 \
-#   --output thirdparty/paper2figure-dataset/arxiv_tools/output
+# python3 thirdparty/paper2figure-dataset/arxiv_tools/dataset_pipeline/filter_papers.py \
+#   -s cs.CV,cs.LG,cs.AI,cs.CL,cs.HCI \
+#   -y 20 -m 01 \
+#   -p ./arxiv-metadata-oai-snapshot.json
 
 
 ## use public bucket to donwload
-python3 thirdparty/paper2figure-dataset/arxiv_tools/core/download_papers.py \
-    --papers thirdparty/paper2figure-dataset/arxiv_tools/output/paper_ids.txt \
-    --output thirdparty/paper2figure-dataset/arxiv_tools/pdfs \
-    --bucket arxiv-dataset \
-    --prefix arxiv/ \
-    --public
+python3 thirdparty/paper2figure-dataset/arxiv_tools/dataset_pipeline/download_papers.py \
+  -p sage-now-232008 \
+  --paper_ids thirdparty/paper2figure-dataset/arxiv_tools/output/paper_ids.txt \
+  -out thirdparty/paper2figure-dataset/arxiv_tools/output/papers
