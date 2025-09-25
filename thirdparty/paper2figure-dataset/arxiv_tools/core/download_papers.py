@@ -52,11 +52,19 @@ def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-d
             
             downloaded_file = None
             for version in versions:
-                # Try flat and year-month nested layouts used by public arXiv bucket
+                # Try flat and year-month nested layouts used by common mirrors
                 ym = paper_id[:4]  # e.g., 0704 from 0704.0001
+                base_prefix = prefix or ""
                 candidate_keys = [
-                    f"{prefix}{version}.pdf",
-                    f"{prefix}pdf/{ym}/{version}.pdf" if not prefix.endswith("pdf/") else f"{prefix}{ym}/{version}.pdf",
+                    # flat under prefix
+                    f"{base_prefix}{version}.pdf",
+                    # nested under pdf/YYMM when prefix doesn't already end with pdf/
+                    f"{base_prefix}pdf/{ym}/{version}.pdf" if not base_prefix.endswith("pdf/") else f"{base_prefix}{ym}/{version}.pdf",
+                    # nested under YYMM directly under prefix
+                    f"{base_prefix}{ym}/{version}.pdf",
+                    # bare layouts without any prefix
+                    f"pdf/{ym}/{version}.pdf",
+                    f"{ym}/{version}.pdf",
                 ]
 
                 for blob_name in candidate_keys:
