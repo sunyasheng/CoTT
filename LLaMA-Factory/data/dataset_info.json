@@ -1,6 +1,6 @@
 {
   "train-cott": {
-    "file_name": "/path/to/train-cott.json"
+    "file_name": "train-cott.json"
   },
   "identity": {
     "file_name": "identity.json"
