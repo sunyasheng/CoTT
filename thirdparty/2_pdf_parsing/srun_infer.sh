@@ -44,7 +44,7 @@ for (( i=0; i<SHARDS; i++ )); do
     --output=logs/mineru_${START}_${END}.out \
     --error=logs/mineru_${START}_${END}.err \
     --unbuffered \
-    bash -lc "mkdir -p logs && conda activate gsam && export MAGIC_PDF_CONFIG=$(pwd)/thirdparty/2_pdf_parsing/magic-pdf.json && python3 thirdparty/2_pdf_parsing/batch_infer.py --root ${ROOT_DIR} --outdir ${OUT_DIR} --start ${START} --end ${END}" &
+    bash -lc "mkdir -p logs && conda activate gsam && python3 thirdparty/2_pdf_parsing/batch_infer.py --root ${ROOT_DIR} --outdir ${OUT_DIR} --start ${START} --end ${END}" &
 done
 
 wait
