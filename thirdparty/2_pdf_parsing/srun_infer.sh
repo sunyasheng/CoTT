@@ -39,12 +39,12 @@ for (( i=0; i<SHARDS; i++ )); do
     --cpus-per-task=4 \
     --mem=64G \
     --time=100:00:00 \
-    --constraint=v100 \
+    --constraint=a100 \
     --job-name=mineru_${START}_${END} \
     --output=logs/mineru_${START}_${END}.out \
     --error=logs/mineru_${START}_${END}.err \
     --unbuffered \
-    bash -lc "mkdir -p logs && python3 thirdparty/2_pdf_parsing/batch_infer.py --root ${ROOT_DIR} --outdir ${OUT_DIR} --start ${START} --end ${END} -- --gpu-memory-utilization 0.10 --max-num-seqs 8 --max-model-len 8192" &
+    bash -lc "mkdir -p logs && conda activate gsam && python3 thirdparty/2_pdf_parsing/batch_infer.py --root ${ROOT_DIR} --outdir ${OUT_DIR} --start ${START} --end ${END} -- --gpu-memory-utilization 0.10 --max-num-seqs 8 --max-model-len 12288" &
 done
 
 wait
