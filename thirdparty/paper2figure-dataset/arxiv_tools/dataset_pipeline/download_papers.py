@@ -6,7 +6,15 @@ from google.cloud import storage
 import os
 import argparse
 from tqdm import tqdm
-from util import has_files
+
+def has_files(path):
+    try:
+        with os.scandir(path) as it:
+            for _ in it:
+                return True
+        return False
+    except FileNotFoundError:
+        return False
 
 # Argument parsing
 parser = argparse.ArgumentParser()
@@ -30,13 +38,17 @@ def main():
     client = storage.Client(project=args.project)
     bucket = client.bucket('arxiv-dataset')
 
-    # Read txt file with ids
-    with open(os.path.join(args.out_path, 'paper_ids.txt'), 'r') as f:
+    # Read txt file with ids (use explicit --paper_ids)
+    with open(args.paper_ids, 'r') as f:
         ids = f.readlines()
 
     download_format = 'pdf'
     OUT_PATH = args.out_path + "/paper2figure_dataset/" + download_format + "/"
-    os.makedirs(OUT_PATH, exists_ok = True)
+    if not os.path.isdir(OUT_PATH):
+        try:
+            os.makedirs(OUT_PATH)
+        except OSError:
+            pass
 
     # Remove downloaded ids from list
     print("Checking if you have any of the files already downloaded")
