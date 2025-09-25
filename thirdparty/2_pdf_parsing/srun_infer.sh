@@ -8,8 +8,8 @@
 
 set -euo pipefail
 
-ROOT_DIR="thirdparty/paper2figure-dataset/arxiv_tools/output/papers/paper2figure_dataset/pdf"
-OUT_DIR="outdir"
+ROOT_DIR="/ibex/user/suny0a/arxiv_dataset/pdf/"
+OUT_DIR="/ibex/user/suny0a/arxiv_dataset/md/"
 
 # Sharding config
 TOTAL=20000
