@@ -65,7 +65,11 @@ def main():
 
     # Create output directory
     OUTPUT_PATH = 'output'
-    os.makedirs(OUTPUT_PATH, exists_ok = True)
+    if not os.path.isdir(OUTPUT_PATH):
+        try:
+            os.makedirs(OUTPUT_PATH)
+        except OSError:
+            pass
 
     # Lists for relevant fields
     titles = []
