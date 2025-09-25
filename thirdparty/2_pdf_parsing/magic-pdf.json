@@ -1,20 +1,17 @@
 {
+  "device-mode": "cuda",
+  "models-dir": "/tmp/models",
+  "layout-config": "layoutlmv3",
+  "formula-config": true,
+  "table-config": true,
+  "ocr-config": true,
   "vlm_backend": "vlm-vllm-engine",
   "vlm_model": "Qwen/Qwen2-VL-7B-Instruct",
-  "device": "cuda",
   "vllm": {
     "tensor_parallel_size": 1,
     "gpu_memory_utilization": 0.10,
     "max_model_len": 12288,
     "max_num_seqs": 8
-  },
-  "table": { "enable": true },
-  "formula": { "enable": true },
-  "ocr": { "enable": true },
-  "output": {
-    "save_md": true,
-    "save_content_list": true,
-    "draw_model_pdf": true
   }
 }
 
