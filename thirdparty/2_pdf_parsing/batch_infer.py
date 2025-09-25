@@ -34,8 +34,8 @@ def run_mineru(pdf_path: Path, out_dir: Path, backend: str, device: str,
 
 
 def main() -> None:
-    default_pdf_root = Path("thirdparty/paper2figure-dataset/arxiv_tools/output/papers/paper2figure_dataset/pdf")
-    default_out_dir = Path("outdir")
+    default_pdf_root = Path("/ibex/user/suny0a/arxiv_dataset/pdf/")
+    default_out_dir = Path("/ibex/user/suny0a/arxiv_dataset/md/")
 
     parser = argparse.ArgumentParser(description="Batch run MinerU over a range of PDFs (by index order)")
     parser.add_argument("--root", type=str, default=str(default_pdf_root),
@@ -135,8 +135,8 @@ def run_mineru(pdf_path: Path, out_dir: Path, backend: str, device: str,
 
 
 def main() -> None:
-    default_pdf_root = Path("thirdparty/paper2figure-dataset/arxiv_tools/output/papers/paper2figure_dataset/pdf")
-    default_out_dir = Path("outdir")
+    default_pdf_root = Path("/ibex/user/suny0a/arxiv_dataset/pdf/")
+    default_out_dir = Path("/ibex/user/suny0a/arxiv_dataset/md/")
 
     parser = argparse.ArgumentParser(description="Batch run MinerU over a range of PDFs (by index order)")
     parser.add_argument("--root", type=str, default=str(default_pdf_root),
