@@ -11,8 +11,16 @@ from pathlib import Path
 from google.cloud import storage
 from tqdm import tqdm
 
-def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-dataset"):
-    """Download papers from Google Cloud Storage"""
+def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-dataset", prefix="arxiv/"):
+    """Download papers from Google Cloud Storage
+
+    Args:
+        paper_ids: Iterable of arXiv IDs without version (e.g., "0704.0001")
+        output_dir: Directory to save PDFs into
+        project_id: Optional GCP project id for the Storage client
+        bucket_name: GCS bucket name
+        prefix: Object key prefix inside the bucket (e.g., "arxiv/" or "paper2figure_dataset/pdf/")
+    """
     
     # Initialize GCS client
     try:
@@ -43,7 +51,7 @@ def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-d
             
             downloaded_file = None
             for version in versions:
-                blob_name = f"arxiv/{version}.pdf"
+                blob_name = f"{prefix}{version}.pdf"
                 blob = bucket.blob(blob_name)
                 
                 if blob.exists():
@@ -78,6 +86,7 @@ def main():
     parser.add_argument("--output", "-o", default="./pdfs", help="Output directory for PDFs")
     parser.add_argument("--project", help="Google Cloud Project ID (optional)")
     parser.add_argument("--bucket", default="arxiv-dataset", help="GCS bucket name")
+    parser.add_argument("--prefix", default="arxiv/", help="GCS object prefix (e.g., 'arxiv/' or 'paper2figure_dataset/pdf/')")
     
     args = parser.parse_args()
     
@@ -88,7 +97,7 @@ def main():
     else:
         paper_ids = [pid.strip() for pid in args.papers.split(',')]
     
-    download_papers(paper_ids, args.output, args.project, args.bucket)
+    download_papers(paper_ids, args.output, args.project, args.bucket, args.prefix)
 
 if __name__ == "__main__":
     main()
