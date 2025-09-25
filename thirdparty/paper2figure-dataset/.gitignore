@@ -1,0 +1,5 @@
+__pycache__/*
+output/*
+*/organized_arxiv_legacy/*
+thirdparty/paper2figure-dataset/organized_arxiv_legacy
+thirdparty/paper2figure-dataset/organized_arxiv_legacy/*
