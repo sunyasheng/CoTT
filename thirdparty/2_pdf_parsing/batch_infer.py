@@ -74,6 +74,14 @@ def process_pdf_with_api(pdf_path: Path, out_dir: Path) -> bool:
 
 
 def main() -> None:
+    # Set magic-pdf config path explicitly
+    config_path = Path(__file__).parent / "magic-pdf.json"
+    if config_path.exists():
+        os.environ["MAGIC_PDF_CONFIG"] = str(config_path)
+        print(f"Using config: {config_path}")
+    else:
+        print(f"Warning: Config file not found at {config_path}")
+    
     default_pdf_root = Path("/ibex/user/suny0a/arxiv_dataset/pdf/")
     default_out_dir = Path("/ibex/user/suny0a/arxiv_dataset/md/")
 
