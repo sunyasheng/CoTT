@@ -11,7 +11,7 @@ from pathlib import Path
 from google.cloud import storage
 from tqdm import tqdm
 
-def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-dataset", prefix="arxiv/"):
+def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-dataset", prefix="arxiv/", public=False):
     """Download papers from Google Cloud Storage
 
     Args:
@@ -24,13 +24,14 @@ def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-d
     
     # Initialize GCS client
     try:
-        if project_id:
-            client = storage.Client(project=project_id)
+        if public:
+            client = storage.Client.create_anonymous_client()
         else:
-            client = storage.Client()
+            client = storage.Client(project=project_id) if project_id else storage.Client()
     except Exception as e:
         print(f"❌ Error initializing Google Cloud client: {e}")
-        print("Make sure you have Google Cloud credentials set up")
+        if not public:
+            print("Tip: use --public to access public buckets without credentials")
         sys.exit(1)
     
     bucket = client.bucket(bucket_name)
@@ -55,11 +56,8 @@ def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-d
                 blob = bucket.blob(blob_name)
                 
                 if blob.exists():
-                    # Create paper directory
                     paper_dir = output_path / paper_id
                     paper_dir.mkdir(exist_ok=True)
-                    
-                    # Download file
                     output_file = paper_dir / f"{version}.pdf"
                     blob.download_to_filename(str(output_file))
                     downloaded_file = output_file
@@ -85,8 +83,9 @@ def main():
     parser.add_argument("--papers", "-p", required=True, help="Paper IDs (comma-separated or file path)")
     parser.add_argument("--output", "-o", default="./pdfs", help="Output directory for PDFs")
     parser.add_argument("--project", help="Google Cloud Project ID (optional)")
-    parser.add_argument("--bucket", default="arxiv-dataset", help="GCS bucket name")
+    parser.add_argument("--bucket", default="arxiv-dataset", help="GCS bucket name (public arXiv bucket: arxiv-dataset)")
     parser.add_argument("--prefix", default="arxiv/", help="GCS object prefix (e.g., 'arxiv/' or 'paper2figure_dataset/pdf/')")
+    parser.add_argument("--public", action="store_true", help="Access public bucket anonymously (no credentials)")
     
     args = parser.parse_args()
     
@@ -97,7 +96,14 @@ def main():
     else:
         paper_ids = [pid.strip() for pid in args.papers.split(',')]
     
-    download_papers(paper_ids, args.output, args.project, args.bucket, args.prefix)
+    download_papers(
+        paper_ids,
+        args.output,
+        args.project,
+        args.bucket,
+        args.prefix,
+        public=args.public,
+    )
 
 if __name__ == "__main__":
     main()
