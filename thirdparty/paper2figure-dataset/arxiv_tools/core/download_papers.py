@@ -52,15 +52,23 @@ def download_papers(paper_ids, output_dir, project_id=None, bucket_name="arxiv-d
             
             downloaded_file = None
             for version in versions:
-                blob_name = f"{prefix}{version}.pdf"
-                blob = bucket.blob(blob_name)
-                
-                if blob.exists():
-                    paper_dir = output_path / paper_id
-                    paper_dir.mkdir(exist_ok=True)
-                    output_file = paper_dir / f"{version}.pdf"
-                    blob.download_to_filename(str(output_file))
-                    downloaded_file = output_file
+                # Try flat and year-month nested layouts used by public arXiv bucket
+                ym = paper_id[:4]  # e.g., 0704 from 0704.0001
+                candidate_keys = [
+                    f"{prefix}{version}.pdf",
+                    f"{prefix}pdf/{ym}/{version}.pdf" if not prefix.endswith("pdf/") else f"{prefix}{ym}/{version}.pdf",
+                ]
+
+                for blob_name in candidate_keys:
+                    blob = bucket.blob(blob_name)
+                    if blob.exists():
+                        paper_dir = output_path / paper_id
+                        paper_dir.mkdir(exist_ok=True)
+                        output_file = paper_dir / f"{version}.pdf"
+                        blob.download_to_filename(str(output_file))
+                        downloaded_file = output_file
+                        break
+                if downloaded_file:
                     break
             
             if downloaded_file:
