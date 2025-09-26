@@ -28,7 +28,7 @@ def read_text(path: Path) -> str:
 
 def run_select_figures(md_path: Path, model: str) -> dict:
     """Call select_figures.py and return its JSON result."""
-    script = Path(__file__).parent / "select_figures.py"
+    script = Path(__file__).parent / "gpt_select_figures.py"
     if not script.exists():
         raise FileNotFoundError(f"select_figures.py not found at {script}")
     cmd = [
@@ -194,7 +194,9 @@ def main():
         # normalize
         outputs.append({
             "figure": str(fig),
-            "captions": obj.get("captions", [])[: args.max_captions],
+            "rubric": obj.get("rubric", {}),
+            "captions": obj.get("captions", []) if args.max_captions <= 0 else obj.get("captions", [])[: args.max_captions],
+            "reconstruction_prompt": obj.get("reconstruction_prompt", ""),
             "context_preview": context[:400],
             "images": [str(p) for p in image_paths]
         })
