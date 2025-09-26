@@ -79,23 +79,23 @@ for (( i=0; i<SHARDS; i++ )); do
     --output=logs/qwen_fig_${START}_${END}.out \
     --error=logs/qwen_fig_${START}_${END}.err \
     --unbuffered \
-    bash -lc "
+    bash -lc '
       set -euo pipefail
-      PORT=\$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
-      echo "Starting Qwen server on port \${PORT}..."
+      PORT=$(python3 -c "import socket; s=socket.socket(); s.bind((\"\", 0)); print(s.getsockname()[1]); s.close()")
+      echo "Starting Qwen server on port ${PORT}..."
       conda activate gsam
-      bash \"${WORKDIR}/qwen_server_setup.sh\" --port \"\${PORT}\" > \"logs/qwen_server_${START}_${END}.out\" 2>&1 &
-      for i in \$(seq 1 60); do
-        if curl -s \"http://127.0.0.1:\${PORT}/v1/models\" >/dev/null; then
-          echo \"Qwen server is up on 127.0.0.1:\${PORT}\"
+      bash "'"${WORKDIR}"'/qwen_server_setup.sh" --port "${PORT}" > "logs/qwen_server_'"${START}"'_'"${END}"'.out" 2>&1 &
+      for i in $(seq 1 60); do
+        if curl -s "http://127.0.0.1:${PORT}/v1/models" >/dev/null; then
+          echo "Qwen server is up on 127.0.0.1:${PORT}"
           break
         fi
-        echo \"Waiting for Qwen server (attempt \$i)...\"; sleep 5
+        echo "Waiting for Qwen server (attempt $i)..."; sleep 5
       done
-      export QWEN_API_KEY=\"${QWEN_API_KEY}\"
-      export QWEN_BASE_URL=\"http://127.0.0.1:\${PORT}/v1\"
-      python3 \"${RUNNER}\" --root \"${ROOT_DIR}\" --start ${START} --end ${END} --glob \"${GLOB}\" --model \"${MODEL}\" --max_figures ${MAX_FIGURES} --max_captions ${MAX_CAPTIONS} --timeout ${TIMEOUT} --outdir \"${OUTDIR}\"
-    " &
+      export QWEN_API_KEY="'"${QWEN_API_KEY}"'"
+      export QWEN_BASE_URL="http://127.0.0.1:${PORT}/v1"
+      python3 "'"${RUNNER}"'" --root "'"${ROOT_DIR}"'" --start '"${START}"' --end '"${END}"' --glob "'"${GLOB}"'" --model "'"${MODEL}"'" --max_figures '"${MAX_FIGURES}"' --max_captions '"${MAX_CAPTIONS}"' --timeout '"${TIMEOUT}"' --outdir "'"${OUTDIR}"'"
+    ' &
 done
 
 wait
