@@ -37,7 +37,10 @@ export TRANSFORMERS_CACHE=$HF_HOME/transformers
 export HF_DATASETS_CACHE=$HF_HOME/datasets
 export HF_HUB_CACHE=$HF_HOME/hub
 export VLLM_CACHE_DIR=/ibex/user/suny0a/vllm_cache
+# Triton autotune cache (avoid NFS)
+export TRITON_CACHE_DIR=/ibex/user/suny0a/triton_autotune
 mkdir -p "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE" "$VLLM_CACHE_DIR"
+mkdir -p "$TRITON_CACHE_DIR"
 
 # 3) Ensure dependencies (idempotent)
 $PYTHON - <<'PY'
@@ -56,11 +59,23 @@ else:
     print("Python deps OK")
 PY
 
-# 4) Launch OpenAI-compatible server
+# 4) Launch OpenAI-compatible server (single A100 80G defaults, override via env)
+VLLM_PORT=${VLLM_PORT:-22002}
+VLLM_MODEL=${VLLM_MODEL:-Qwen/Qwen2.5-VL-32B-Instruct}
+VLLM_MAX_LEN=${VLLM_MAX_LEN:-12288}
+VLLM_NUM_SEQS=${VLLM_NUM_SEQS:-4}
+VLLM_GPU_UTIL=${VLLM_GPU_UTIL:-0.92}
+
+echo "[INFO] Starting vLLM server on port ${VLLM_PORT} with model ${VLLM_MODEL}"
 $PYTHON -m vllm.entrypoints.openai.api_server \
-  --model Qwen/Qwen2.5-VL-7B-Instruct \
+  --model "${VLLM_MODEL}" \
   --trust-remote-code \
   --download-dir "$HF_HOME" \
-  --max-model-len 8192 \
-  --gpu-memory-utilization 0.90 \
-  --port 22002
+  --max-model-len "${VLLM_MAX_LEN}" \
+  --max-num-seqs "${VLLM_NUM_SEQS}" \
+  --gpu-memory-utilization "${VLLM_GPU_UTIL}" \
+  --port "${VLLM_PORT}"
+
+echo "[INFO] Server started. Example client env:"
+echo "export QWEN_BASE_URL=http://127.0.0.1:${VLLM_PORT}/v1"
+echo "export QWEN_API_KEY=EMPTY"
