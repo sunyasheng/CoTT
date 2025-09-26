@@ -107,12 +107,21 @@ def call_openai(model: str, system_prompt: str, user_prompt: str, images: list[P
 
 
 def build_caption_prompt(fig_num: str, context: str, max_captions: int) -> str:
+    cap_hint = (
+        f"Provide at least {max_captions} steps." if max_captions and max_captions > 0
+        else "Provide as many atomic steps as needed (no hard upper bound)."
+    )
     guide = (
-        "You are given the actual figure image plus nearby markdown context.\n"
-        "Produce 2-3 diverse drawing-oriented captions that would let a designer or a text-to-image model recreate the figure layout.\n"
-        "Each caption must be step-by-step, covering: components, spatial arrangement (left/center/right, grid/columns/lanes), arrows/edges (directions and labels), grouping/containers, legend, title, key labels, and stylistic hints (shapes, colors, line styles).\n"
-        "Prefer concise but complete instructions. Avoid results plots; focus on system/flow structure.\n"
-        f"Return strict JSON with keys: figure (string), captions (array, up to {max_captions})."
+        "You are given the actual figure image plus nearby markdown context from a paper.\n"
+        "Role: a senior illustrator who must (1) build a rubric, then (2) reverse-engineer drawing instructions.\n\n"
+        "1) Rubric:\n"
+        "- Derive the rubric from the paper's logic (not from guesswork). Map textual semantics (entities, relations, process steps, constraints) to visual requirements (what must appear, where, how connected, with which labels/symbols).\n"
+        "- The rubric should specify necessary conditions for correctness: entities present, spatial relations, arrow directions/labels, grouping/containers, legends/titles/keys, math/symbols, styling fidelity; plus any ordering/causal constraints implied by the paper.\n\n"
+        "2) Reverse-Engineering (Drawing Instructions):\n"
+        "- Produce an exhaustive, step-by-step set of drawing instructions to recreate the figure. " + cap_hint + "\n"
+        "- Cover: components, spatial arrangement (left/center/right, grid/columns/lanes), arrows/edges (directions & labels), grouping/containers, legend/title/key labels, and stylistic hints (shape/color/line style).\n"
+        "- Also provide one consolidated 'reconstruction_prompt' suitable for a text-to-image model (concise but complete).\n\n"
+        "Return strict JSON with keys: figure (string), rubric (object), captions (array of steps), reconstruction_prompt (string)."
     )
     ctx = f"Figure: {fig_num}\nContext from paper markdown (may include nearby text or image markdown):\n---\n{context}\n---"
     return guide + "\n\n" + ctx

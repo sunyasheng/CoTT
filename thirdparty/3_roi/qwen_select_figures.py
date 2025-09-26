@@ -117,3 +117,8 @@ if __name__ == "__main__":
     main()
 
 
+# export QWEN_BASE_URL=http://10.109.17.91:22002/v1
+# export QWEN_API_KEY=EMPTY
+# python3 thirdparty/3_roi/qwen_select_figures.py \
+#   --md debug/0806.1636v1/vlm/0806.1636v1.md \
+#   --model "Qwen/Qwen2.5-VL-32B-Instruct"
