@@ -167,6 +167,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=120, help="Request timeout seconds")
     parser.add_argument("--max_figures", type=int, default=3, help="Max figures to process")
     parser.add_argument("--max_captions", type=int, default=3, help="Max captions per figure (set 0 for unlimited)")
+    parser.add_argument("--outdir", type=str, default="", help="If set, write JSON to this directory as <md_stem>.json")
     args = parser.parse_args()
 
     env_path = load_env()
@@ -213,7 +214,16 @@ def main():
             "images": [str(p) for p in image_paths],
         })
 
-    print(json.dumps({"figures": outputs}, ensure_ascii=False))
+    result = {"figures": outputs}
+    if args.outdir:
+        out_dir = Path(args.outdir).expanduser().resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stem = md_path.stem
+        out_path = out_dir / f"{stem}.json"
+        out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(str(out_path))
+    else:
+        print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":
