@@ -81,7 +81,7 @@ for (( i=0; i<SHARDS; i++ )); do
     --unbuffered \
     bash -lc "
       set -euo pipefail
-      PORT=\$(python3 -c 'import socket; s=socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1]); s.close()')
+      PORT=\$(python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', 0)); print(s.getsockname()[1]); s.close()")
       echo "Starting Qwen server on port \${PORT}..."
       conda activate gsam
       bash \"${WORKDIR}/qwen_server_setup.sh\" --port \"\${PORT}\" > \"logs/qwen_server_${START}_${END}.out\" 2>&1 &
