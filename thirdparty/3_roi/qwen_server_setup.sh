@@ -1,14 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 1) Activate conda env
-# Adjust the path to your conda.sh if different on this cluster
-if [ -f "$HOME/.conda/etc/profile.d/conda.sh" ]; then
-  . "$HOME/.conda/etc/profile.d/conda.sh"
-elif [ -f "/etc/profile.d/conda.sh" ]; then
-  . "/etc/profile.d/conda.sh"
+# 1) Activate conda env (robust, non-interactive)
+PYTHON=python
+if [ "${CONDA_DEFAULT_ENV-}" != "gsam" ]; then
+  # try common init methods
+  if command -v conda >/dev/null 2>&1; then
+    eval "$(conda shell.bash hook)" || true
+  fi
+  if [ -f "$HOME/.conda/etc/profile.d/conda.sh" ]; then
+    . "$HOME/.conda/etc/profile.d/conda.sh" || true
+  fi
+  if [ -f "/etc/profile.d/conda.sh" ]; then
+    . "/etc/profile.d/conda.sh" || true
+  fi
+  if [ -x "$HOME/miniconda3/bin/conda" ]; then
+    eval "$("$HOME/miniconda3/bin/conda" shell.bash hook)" || true
+  fi
+
+  if command -v conda >/dev/null 2>&1; then
+    conda activate gsam || true
+  fi
+
+  # If still not active, fallback to conda run
+  if [ "${CONDA_DEFAULT_ENV-}" != "gsam" ]; then
+    echo "[INFO] Falling back to 'conda run -n gsam' without activate."
+    PYTHON="conda run -n gsam --no-capture-output python"
+  else
+    PYTHON=python
+  fi
 fi
-conda activate gsam
 
 # 2) Configure caches to non-home large disk
 export HF_HOME=/ibex/user/suny0a/hf_cache
@@ -19,7 +40,7 @@ export VLLM_CACHE_DIR=/ibex/user/suny0a/vllm_cache
 mkdir -p "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE" "$VLLM_CACHE_DIR"
 
 # 3) Ensure dependencies (idempotent)
-python - <<'PY'
+$PYTHON - <<'PY'
 import importlib, sys
 missing = []
 for pkg in ["vllm", "transformers", "qwen_vl_utils"]:
@@ -36,7 +57,7 @@ else:
 PY
 
 # 4) Launch OpenAI-compatible server
-python -m vllm.entrypoints.openai.api_server \
+$PYTHON -m vllm.entrypoints.openai.api_server \
   --model Qwen/Qwen2.5-VL-7B-Instruct \
   --trust-remote-code \
   --download-dir "$HF_HOME" \
