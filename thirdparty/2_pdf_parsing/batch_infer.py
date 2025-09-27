@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import re
 import subprocess
 import sys
 import os
@@ -8,26 +9,81 @@ from pathlib import Path
 from typing import List
 
 
-def find_pdfs(root_dir: Path) -> List[Path]:
+def find_pdfs(root_dir: Path, dedupe_versions: bool = True, shuffle: bool = True) -> List[Path]:
     if not root_dir.exists():
         raise FileNotFoundError(f"PDF root not found: {root_dir}")
     pdfs = sorted(root_dir.rglob("*.pdf"))
     if not pdfs:
         raise FileNotFoundError(f"No PDFs found under: {root_dir}")
+    
+    if dedupe_versions:
+        # Group by paper ID (extract from path like /path/to/1905.12185v3.pdf)
+        paper_groups = {}
+        for pdf in pdfs:
+            # Extract paper ID from filename: 1905.12185v3.pdf -> 1905.12185
+            filename = pdf.name
+            match = re.match(r'(\d{4}\.\d{4,5})', filename)
+            if match:
+                paper_id = match.group(1)
+                if paper_id not in paper_groups:
+                    paper_groups[paper_id] = []
+                paper_groups[paper_id].append(pdf)
+        
+        # Keep only the first version of each paper
+        deduped_pdfs = []
+        for paper_id, versions in sorted(paper_groups.items()):
+            # Sort versions and take the first one
+            versions.sort()
+            deduped_pdfs.append(versions[0])
+        
+        print(f"Found {len(pdfs)} total PDFs, deduplicated to {len(deduped_pdfs)} unique papers")
+        
+        # Shuffle for better load balancing across shards
+        if shuffle:
+            import random
+            random.seed(42)  # Fixed seed for reproducibility
+            random.shuffle(deduped_pdfs)
+            print(f"Shuffled PDF list for better load balancing")
+        
+        return deduped_pdfs
+    
     return pdfs
 
 
 def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
     """Process multiple PDFs in a single MinerU CLI call to avoid model reloading"""
     try:
+        # Filter out already processed PDFs
+        remaining_pdfs = []
+        skipped = 0
+        
+        for pdf_path in pdf_paths:
+            # Check if corresponding markdown output already exists
+            # PDF: /path/to/1905.12185v3.pdf -> MD: /outdir/1905.12185v3/vlm/1905.12185v3.md
+            pdf_stem = pdf_path.stem  # e.g., "1905.12185v3"
+            expected_md_dir = out_dir / pdf_stem / "vlm"
+            expected_md_file = expected_md_dir / f"{pdf_stem}.md"
+            
+            if expected_md_file.exists():
+                print(f"SKIP {pdf_path.name} -> {expected_md_file} (already processed)")
+                skipped += 1
+            else:
+                remaining_pdfs.append(pdf_path)
+        
+        if not remaining_pdfs:
+            print(f"All {len(pdf_paths)} PDFs already processed, skipping batch")
+            return 0
+        
+        print(f"Processing {len(remaining_pdfs)}/{len(pdf_paths)} PDFs ({skipped} skipped)")
+        
         # Create a temporary directory for this batch
         import tempfile
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_pdf_dir = Path(temp_dir) / "pdfs"
             temp_pdf_dir.mkdir()
             
-            # Copy PDFs to temp directory
-            for pdf_path in pdf_paths:
+            # Copy remaining PDFs to temp directory
+            for pdf_path in remaining_pdfs:
                 import shutil
                 shutil.copy2(pdf_path, temp_pdf_dir / pdf_path.name)
             
@@ -43,11 +99,11 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
                 "--gpu-memory-utilization", "0.10"
             ]
             
-            print(f"Processing batch of {len(pdf_paths)} PDFs with single model load...")
+            print(f"Processing batch of {len(remaining_pdfs)} PDFs with single model load...")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 print(f"MinerU CLI failed for batch: {result.stderr}", file=sys.stderr)
-                return len(pdf_paths)  # All failed
+                return len(remaining_pdfs)  # Remaining failed
             
             return 0  # All succeeded
         
@@ -77,6 +133,7 @@ def main() -> None:
                         help="1-based end index in the sorted PDF list (inclusive)")
     parser.add_argument("--outdir", type=str, default=str(default_out_dir),
                         help="Output directory for MinerU outputs")
+    parser.add_argument("--no-dedupe", action="store_true", help="Disable deduplication of paper versions")
     # Note: backend, device, max-num-seqs, max-model-len are handled by MinerU's internal configuration
     # The Python API doesn't expose these vLLM parameters directly
 
@@ -86,7 +143,7 @@ def main() -> None:
     out_dir = Path(args.outdir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    pdfs = find_pdfs(root_dir)
+    pdfs = find_pdfs(root_dir, dedupe_versions=not args.no_dedupe)
 
     if args.start < 1 or args.end < args.start or args.end > len(pdfs):
         print(f"Invalid range: start={args.start}, end={args.end}, total={len(pdfs)}", file=sys.stderr)
