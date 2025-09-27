@@ -86,30 +86,30 @@ for year in "${ICCV_YEARS[@]}"; do
       fi
       
       # Run the download
-      python3 -c "
+      python3 -c \"
 import sys
 import os
-sys.path.append('"${WORKDIR}"')
-sys.path.append('"${WORKDIR}"/code')
+sys.path.append('${WORKDIR}')
+sys.path.append('${WORKDIR}/code')
 
 from paper_downloader_CVF import download_paper
 
-print(f'Downloading ICCV '"${year}"'...')
+print(f'Downloading ICCV ${year}...')
 download_paper(
-    year="${year}",
+    year=${year},
     conference='ICCV',
-    save_dir='"${BASE_SAVE_DIR}"/ICCV_"${year}"',
-    is_download_main_paper=$MAIN_BOOL,
-    is_download_supplement=$SUPP_BOOL,
+    save_dir='${BASE_SAVE_DIR}/ICCV_${year}',
+    is_download_main_paper=\${MAIN_BOOL},
+    is_download_supplement=\${SUPP_BOOL},
     time_step_in_seconds=${TIME_STEP},
-    is_download_main_conference=$MAIN_BOOL,
-    is_download_workshops=$WORKSHOP_BOOL,
+    is_download_main_conference=\${MAIN_BOOL},
+    is_download_workshops=\${WORKSHOP_BOOL},
     downloader=None
 )
-print(f'Completed ICCV '"${year}"' download')
-"
+print(f'Completed ICCV ${year} download')
+\"
       
-      echo "ICCV '"${year}"' download completed successfully"
+      echo 'ICCV ${year} download completed successfully'
     ' &
     
   # Add a small delay between job submissions
