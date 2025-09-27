@@ -36,9 +36,6 @@ for (( year=2013; year<=2025; year++ )); do
   
   echo "Submitting job for CVPR ${year}..."
   
-  # Create year-specific save directory
-  YEAR_SAVE_DIR="${BASE_SAVE_DIR}_${year}"
-  
   srun \
     --ntasks=1 \
     --cpus-per-task=4 \
@@ -48,81 +45,73 @@ for (( year=2013; year<=2025; year++ )); do
     --output=logs/cvpr_${year}.out \
     --error=logs/cvpr_${year}.err \
     --unbuffered \
-    bash -lc '
+    bash -lc "
       set -euo pipefail
       
-      YEAR='"${year}"'
-      SAVE_DIR='"${BASE_SAVE_DIR}"'/CVPR_${YEAR}
-      WORKDIR='"${WORKDIR}"'
-      TIME_STEP='"${TIME_STEP}"'
-      DOWNLOAD_MAIN='"${DOWNLOAD_MAIN}"'
-      DOWNLOAD_WORKSHOPS='"${DOWNLOAD_WORKSHOPS}"'
-      DOWNLOAD_SUPPLEMENT='"${DOWNLOAD_SUPPLEMENT}"'
-      DOWNLOADER='"${DOWNLOADER}"'
-      
-      echo "Starting download for CVPR ${YEAR}..."
-      echo "Save directory: ${SAVE_DIR}"
-      echo "Time step: ${TIME_STEP} seconds"
+      echo 'Starting download for CVPR ${year}...'
+      echo 'Save directory: ${BASE_SAVE_DIR}/CVPR_${year}'
+      echo 'Time step: ${TIME_STEP} seconds'
       
       # Activate conda environment
-      echo "Activating conda environment: scientist.sh"
+      echo 'Activating conda environment: scientist.sh'
       conda activate scientist.sh
       
-      cd "${WORKDIR}"
+      cd ${WORKDIR}
       
       # Create save directory
-      mkdir -p "${SAVE_DIR}"
+      mkdir -p ${BASE_SAVE_DIR}/CVPR_${year}
       
       # Convert boolean strings to Python booleans
-      if [[ "${DOWNLOAD_MAIN}" == "true" ]]; then
-        MAIN_BOOL="True"
+      if [[ '${DOWNLOAD_MAIN}' == 'true' ]]; then
+        MAIN_BOOL='True'
       else
-        MAIN_BOOL="False"
+        MAIN_BOOL='False'
       fi
       
-      if [[ "${DOWNLOAD_WORKSHOPS}" == "true" ]]; then
-        WORKSHOP_BOOL="True"
+      if [[ '${DOWNLOAD_WORKSHOPS}' == 'true' ]]; then
+        WORKSHOP_BOOL='True'
       else
-        WORKSHOP_BOOL="False"
+        WORKSHOP_BOOL='False'
       fi
       
-      if [[ "${DOWNLOAD_SUPPLEMENT}" == "true" ]]; then
-        SUPP_BOOL="True"
+      if [[ '${DOWNLOAD_SUPPLEMENT}' == 'true' ]]; then
+        SUPP_BOOL='True'
       else
-        SUPP_BOOL="False"
+        SUPP_BOOL='False'
       fi
       
-      if [[ "${DOWNLOADER}" == "IDM" ]]; then
-        DOWNLOADER_ARG="IDM"
+      if [[ '${DOWNLOADER}' == 'IDM' ]]; then
+        DOWNLOADER_ARG='IDM'
       else
-        DOWNLOADER_ARG="None"
+        DOWNLOADER_ARG='None'
       fi
       
       # Run the download
-      python3 -c "
+      python3 -c \"
 import sys
 import os
 sys.path.append('${WORKDIR}')
+sys.path.append('${WORKDIR}/code')
 
-from code.paper_downloader_CVF import download_paper
+from paper_downloader_CVF import download_paper
 
-print(f'Downloading CVPR {YEAR}...')
+print(f'Downloading CVPR ${year}...')
 download_paper(
-    year=${YEAR},
+    year=${year},
     conference='CVPR',
-    save_dir='${SAVE_DIR}',
-    is_download_main_paper=${MAIN_BOOL},
-    is_download_supplement=${SUPP_BOOL},
+    save_dir='${BASE_SAVE_DIR}/CVPR_${year}',
+    is_download_main_paper=\${MAIN_BOOL},
+    is_download_supplement=\${SUPP_BOOL},
     time_step_in_seconds=${TIME_STEP},
-    is_download_main_conference=${MAIN_BOOL},
-    is_download_workshops=${WORKSHOP_BOOL},
-    downloader='${DOWNLOADER_ARG}'
+    is_download_main_conference=\${MAIN_BOOL},
+    is_download_workshops=\${WORKSHOP_BOOL},
+    downloader='\${DOWNLOADER_ARG}'
 )
-print(f'Completed CVPR {YEAR} download')
-"
+print(f'Completed CVPR ${year} download')
+\"
       
-      echo "CVPR ${YEAR} download completed successfully"
-    ' &
+      echo 'CVPR ${year} download completed successfully'
+    " &
     
   # Add a small delay between job submissions
   sleep 2
