@@ -28,6 +28,18 @@ def debug_single_year(year, save_dir, download_main=True, download_workshops=Tru
     print(f"Downloader: {downloader}")
     print("=" * 50)
     
+    # Create necessary directories
+    csv_dir = os.path.join(root_folder, 'csv')
+    urls_dir = os.path.join(root_folder, 'urls')
+    logs_dir = os.path.join(root_folder, 'logs')
+    
+    os.makedirs(csv_dir, exist_ok=True)
+    os.makedirs(urls_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
+    
+    print(f"Created directories: {csv_dir}, {urls_dir}, {logs_dir}, {save_dir}")
+    
     try:
         # Test CSV generation first
         print(f"Step 1: Generating CSV for CVPR {year}...")
@@ -96,8 +108,17 @@ def main():
     
     args = parser.parse_args()
     
-    # Create save directory
+    # Create all necessary directories
+    csv_dir = os.path.join(root_folder, 'csv')
+    urls_dir = os.path.join(root_folder, 'urls')
+    logs_dir = os.path.join(root_folder, 'logs')
+    
+    os.makedirs(csv_dir, exist_ok=True)
+    os.makedirs(urls_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
     os.makedirs(args.save_dir, exist_ok=True)
+    
+    print(f"Ensured directories exist: csv, urls, logs, save_dir")
     
     print(f"Starting debug session for CVPR {args.year}")
     print(f"Save directory: {args.save_dir}")
