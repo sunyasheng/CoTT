@@ -33,9 +33,28 @@ mkdir -p logs
 
 COUNT_ALL=$(python3 - <<PY
 from pathlib import Path
+import re
 root=Path('${ROOT_DIR}').resolve()
-mds=sorted(root.rglob('${GLOB}'))
-print(len(mds))
+all_mds = sorted(root.rglob('${GLOB}'))
+
+# Deduplicate by paper ID (same logic as batch script)
+paper_groups = {}
+for md in all_mds:
+    parts = md.parts
+    for part in parts:
+        if re.match(r'\d{4}\.\d{4,5}', part):
+            paper_id = re.match(r'(\d{4}\.\d{4,5})', part).group(1)
+            if paper_id not in paper_groups:
+                paper_groups[paper_id] = []
+            paper_groups[paper_id].append(md)
+            break
+
+deduped_mds = []
+for paper_id, versions in sorted(paper_groups.items()):
+    versions.sort()
+    deduped_mds.append(versions[0])
+
+print(len(deduped_mds))
 PY
 )
 
@@ -73,9 +92,9 @@ print(existing)
 PY
 )
   echo "Found ${EXISTING}/${TOTAL} outputs already exist in ${OUTDIR}"
-  echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} markdowns (≈${PER_SHARD}/shard)"
+  echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} unique papers (≈${PER_SHARD}/shard)"
 else
-  echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} markdowns (≈${PER_SHARD}/shard)"
+  echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} unique papers (≈${PER_SHARD}/shard)"
 fi
 
 for (( i=0; i<SHARDS; i++ )); do

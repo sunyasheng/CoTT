@@ -1,16 +1,42 @@
 #!/usr/bin/env python3
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 
-def find_mds(root_dir: Path, pattern: str = "*.md") -> list[Path]:
+def find_mds(root_dir: Path, pattern: str = "*.md", dedupe_versions: bool = True) -> list[Path]:
     if not root_dir.exists():
         raise FileNotFoundError(f"MD root not found: {root_dir}")
     mds = sorted(root_dir.rglob(pattern))
     if not mds:
         raise FileNotFoundError(f"No markdown files found under: {root_dir} (pattern={pattern})")
+    
+    if dedupe_versions:
+        # Group by paper ID (extract from path like /path/to/1905.12185v3/vlm/file.md)
+        paper_groups = {}
+        for md in mds:
+            # Extract paper ID from path: /path/to/1905.12185v3/vlm/file.md -> 1905.12185
+            parts = md.parts
+            for part in parts:
+                if re.match(r'\d{4}\.\d{4,5}', part):
+                    paper_id = re.match(r'(\d{4}\.\d{4,5})', part).group(1)
+                    if paper_id not in paper_groups:
+                        paper_groups[paper_id] = []
+                    paper_groups[paper_id].append(md)
+                    break
+        
+        # Keep only the first version of each paper
+        deduped_mds = []
+        for paper_id, versions in sorted(paper_groups.items()):
+            # Sort versions and take the first one
+            versions.sort()
+            deduped_mds.append(versions[0])
+        
+        print(f"Found {len(mds)} total markdown files, deduplicated to {len(deduped_mds)} unique papers")
+        return deduped_mds
+    
     return mds
 
 
@@ -25,10 +51,11 @@ def main() -> None:
     parser.add_argument("--max_captions", type=int, default=0, help="Max steps per figure (0 = unlimited)")
     parser.add_argument("--timeout", type=int, default=120, help="Request timeout seconds")
     parser.add_argument("--outdir", type=str, default="", help="Write each result JSON to this directory")
+    parser.add_argument("--no-dedupe", action="store_true", help="Disable deduplication of paper versions")
     args = parser.parse_args()
 
     root_dir = Path(args.root).resolve()
-    md_files = find_mds(root_dir, args.glob)
+    md_files = find_mds(root_dir, args.glob, dedupe_versions=not args.no_dedupe)
 
     if args.start < 1 or args.end < args.start or args.end > len(md_files):
         print(f"Invalid range: start={args.start}, end={args.end}, total={len(md_files)}", file=sys.stderr)
