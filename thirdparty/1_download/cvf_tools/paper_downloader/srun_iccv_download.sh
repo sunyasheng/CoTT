@@ -31,11 +31,13 @@ ICCV_YEARS=(2013 2015 2017 2019 2021 2023)
 # Create download script for each year
 count=0
 for year in "${ICCV_YEARS[@]}"; do
+  echo "Processing ICCV ${year} (count: $((count + 1))/${YEARS})..."
+  
   # Check if we've reached the limit
   if (( count >= YEARS )); then
+    echo "Reached limit of ${YEARS} years, stopping."
     break
   fi
-  ((count++))
   
   echo "Submitting job for ICCV ${year}..."
   
@@ -112,6 +114,7 @@ print(f'Completed ICCV ${year} download')
     
   # Add a small delay between job submissions
   sleep 2
+  ((count++))
 done
 
 echo "All ICCV download jobs submitted!"
