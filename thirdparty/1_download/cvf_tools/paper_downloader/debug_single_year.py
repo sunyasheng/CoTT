@@ -12,7 +12,9 @@ import argparse
 root_folder = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_folder)
 
-from code.paper_downloader_CVF import download_paper, save_csv, download_from_csv
+# Import from the correct module
+sys.path.append(os.path.join(root_folder, 'code'))
+from paper_downloader_CVF import download_paper, save_csv, download_from_csv
 
 def debug_single_year(year, save_dir, download_main=True, download_workshops=True, 
                      download_supplement=False, time_step=5, downloader=None):
@@ -34,7 +36,7 @@ def debug_single_year(year, save_dir, download_main=True, download_workshops=Tru
         
         if download_workshops:
             print(f"Step 2: Generating CSV for CVPR {year} workshops...")
-            from code.paper_downloader_CVF import save_csv_workshops
+            from paper_downloader_CVF import save_csv_workshops
             total_workshops = save_csv_workshops(year, 'CVPR')
             print(f"✅ Found {total_workshops} workshop papers")
         
@@ -109,7 +111,7 @@ def main():
             print(f"✅ Main conference: {total_papers} papers found")
             
             if args.download_workshops:
-                from code.paper_downloader_CVF import save_csv_workshops
+                from paper_downloader_CVF import save_csv_workshops
                 total_workshops = save_csv_workshops(args.year, 'CVPR')
                 print(f"✅ Workshops: {total_workshops} papers found")
             
