@@ -80,12 +80,6 @@ for (( year=2013; year<=2025; year++ )); do
         SUPP_BOOL='False'
       fi
       
-      if [[ '${DOWNLOADER}' == 'IDM' ]]; then
-        DOWNLOADER_ARG='IDM'
-      else
-        DOWNLOADER_ARG='None'
-      fi
-      
       # Run the download
       python3 -c \"
 import sys
@@ -105,7 +99,7 @@ download_paper(
     time_step_in_seconds=${TIME_STEP},
     is_download_main_conference=\${MAIN_BOOL},
     is_download_workshops=\${WORKSHOP_BOOL},
-    downloader='\${DOWNLOADER_ARG}'
+    downloader=None
 )
 print(f'Completed CVPR ${year} download')
 \"
