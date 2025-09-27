@@ -42,7 +42,17 @@ def main() -> None:
         raise FileNotFoundError(f"qwen_select_and_caption.py not found at {script}")
 
     failures = 0
+    skipped = 0
     for md in sel:
+        # Check if output already exists
+        if args.outdir:
+            out_dir = Path(args.outdir).expanduser().resolve()
+            output_file = out_dir / f"{md.stem}.json"
+            if output_file.exists():
+                print(f"SKIP {md} -> {output_file} (already exists)")
+                skipped += 1
+                continue
+        
         cmd = [
             "python3", str(script),
             "--md", str(md),
@@ -62,9 +72,9 @@ def main() -> None:
             print(res.stdout)
 
     if failures:
-        print(f"Done with {failures} failures.")
+        print(f"Done with {failures} failures, {skipped} skipped.")
         sys.exit(1)
-    print("All done.")
+    print(f"All done. {skipped} files skipped (already processed).")
 
 
 if __name__ == "__main__":

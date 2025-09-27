@@ -55,7 +55,28 @@ else
 fi
 
 PER_SHARD=$(( (TOTAL + SHARDS - 1) / SHARDS ))
-echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} markdowns (≈${PER_SHARD}/shard)"
+
+# Count existing outputs (if OUTDIR is set)
+if [[ -n "${OUTDIR:-}" ]]; then
+  EXISTING=$(python3 - <<PY
+from pathlib import Path
+import sys
+root = Path('${ROOT_DIR}').resolve()
+outdir = Path('${OUTDIR}').expanduser().resolve()
+mds = sorted(root.rglob('${GLOB}'))[:${TOTAL}]
+existing = 0
+for md in mds:
+    output_file = outdir / f"{md.stem}.json"
+    if output_file.exists():
+        existing += 1
+print(existing)
+PY
+)
+  echo "Found ${EXISTING}/${TOTAL} outputs already exist in ${OUTDIR}"
+  echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} markdowns (≈${PER_SHARD}/shard)"
+else
+  echo "Launching ${SHARDS} shards over ${TOTAL}/${COUNT_ALL} markdowns (≈${PER_SHARD}/shard)"
+fi
 
 for (( i=0; i<SHARDS; i++ )); do
   START=$(( i * PER_SHARD + 1 ))
