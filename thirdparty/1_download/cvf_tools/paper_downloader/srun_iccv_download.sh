@@ -115,7 +115,10 @@ print(f'Completed ICCV ${year} download')
   # Add a small delay between job submissions
   sleep 2
   ((count++))
+  echo "Completed submission for ICCV ${year}, count is now ${count}"
 done
+
+echo "Finished all submissions, count is ${count}"
 
 echo "All ICCV download jobs submitted!"
 echo "Monitor progress with: squeue -u \$USER"
