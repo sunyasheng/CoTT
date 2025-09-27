@@ -120,6 +120,6 @@ done
 echo "All ICCV download jobs submitted!"
 echo "Monitor progress with: squeue -u \$USER"
 echo "Check logs in: ${WORKDIR}/logs/"
-
-wait
-echo "All ICCV download jobs completed!"
+echo ""
+echo "Note: Jobs are running in background. Use 'squeue -u \$USER' to monitor progress."
+echo "Use 'wait' command if you want to wait for all jobs to complete."
