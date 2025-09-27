@@ -29,11 +29,13 @@ echo "Base save directory: ${BASE_SAVE_DIR}"
 ICCV_YEARS=(2013 2015 2017 2019 2021 2023)
 
 # Create download script for each year
+count=0
 for year in "${ICCV_YEARS[@]}"; do
   # Check if we've reached the limit
-  if (( year > 2023 - YEARS + 1 )); then
+  if (( count >= YEARS )); then
     break
   fi
+  ((count++))
   
   echo "Submitting job for ICCV ${year}..."
   
