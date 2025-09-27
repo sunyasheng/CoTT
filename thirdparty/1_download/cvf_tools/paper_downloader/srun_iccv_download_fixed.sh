@@ -43,6 +43,7 @@ for year in "${ICCV_YEARS[@]}"; do
   fi
   
   echo "Submitting job for ICCV ${year}..."
+  echo "DEBUG: About to run srun command for year ${year}"
   
   srun \
     --ntasks=1 \
