@@ -64,6 +64,10 @@ for (( year=2013; year<=2025; year++ )); do
       echo "Save directory: ${SAVE_DIR}"
       echo "Time step: ${TIME_STEP} seconds"
       
+      # Activate conda environment
+      echo "Activating conda environment: scientist.sh"
+      conda activate scientist.sh
+      
       cd "${WORKDIR}"
       
       # Create save directory
