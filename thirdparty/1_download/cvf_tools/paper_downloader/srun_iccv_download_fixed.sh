@@ -116,6 +116,8 @@ print(f'Completed ICCV ${year} download')
       echo 'ICCV ${year} download completed successfully'
     " &
     
+  echo "DEBUG: srun command submitted for year ${year}"
+  
   # Add a small delay between job submissions
   sleep 2
   ((count++))
