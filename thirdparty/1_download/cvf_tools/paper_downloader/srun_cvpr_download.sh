@@ -52,7 +52,7 @@ for (( year=2013; year<=2025; year++ )); do
       set -euo pipefail
       
       YEAR='"${year}"'
-      SAVE_DIR='"${YEAR_SAVE_DIR}"'
+      SAVE_DIR='"${BASE_SAVE_DIR}"'/CVPR_${YEAR}
       WORKDIR='"${WORKDIR}"'
       TIME_STEP='"${TIME_STEP}"'
       DOWNLOAD_MAIN='"${DOWNLOAD_MAIN}"'
