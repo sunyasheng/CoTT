@@ -51,8 +51,17 @@ def build_selection_prompt(candidates, max_figures: int) -> str:
         "If uncertain, skip. Return a strict JSON object with keys: figures (array of figure numbers as strings, max N), rationale (short string)."
     )
     parts = ["Snippets:"]
-    for c in candidates:
-        parts.append(f"- line {c['line']}: fig(s) {', '.join(c['fig_nums'])}\n{c['snippet']}")
+    
+    # Limit candidates to avoid token overflow (rough estimate: 100 tokens per candidate)
+    max_candidates = min(len(candidates), 80)  # Keep first 80 candidates max
+    for c in candidates[:max_candidates]:
+        # Truncate snippet if too long (keep first 200 chars)
+        snippet = c['snippet'][:200] + "..." if len(c['snippet']) > 200 else c['snippet']
+        parts.append(f"- line {c['line']}: fig(s) {', '.join(c['fig_nums'])}\n{snippet}")
+    
+    if len(candidates) > max_candidates:
+        parts.append(f"... (and {len(candidates) - max_candidates} more figure mentions)")
+    
     return guide + "\n\n" + "\n\n".join(parts)
 
 
@@ -126,7 +135,10 @@ def build_caption_prompt(fig_num: str, context: str, max_captions: int) -> str:
         "- Also provide one consolidated 'reconstruction_prompt' suitable for a text-to-image model (concise but complete).\n\n"
         "Return strict JSON with keys: figure (string), rubric (object), captions (array of steps), reconstruction_prompt (string)."
     )
-    ctx = f"Figure: {fig_num}\nContext from paper markdown (may include nearby text or image markdown):\n---\n{context}\n---"
+    
+    # Truncate context if too long (keep first 2000 chars)
+    truncated_context = context[:2000] + "..." if len(context) > 2000 else context
+    ctx = f"Figure: {fig_num}\nContext from paper markdown (may include nearby text or image markdown):\n---\n{truncated_context}\n---"
     return guide + "\n\n" + ctx
 
 
