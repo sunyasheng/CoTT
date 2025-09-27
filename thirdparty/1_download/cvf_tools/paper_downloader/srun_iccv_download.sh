@@ -1,11 +1,14 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-# ICCV paper download script
-# Usage: bash srun_iccv_download.sh [YEARS=6] [TIME=12:00:00]
+# ICCV Paper Download Script using srun
+# Usage: bash srun_iccv_download.sh [YEARS=6] [TIME=12:00:00] [DOWNLOADER=requests]
+#   YEARS: number of years to download (2013,2015,2017,2019,2021,2023, default 6)
+#   TIME: time limit per job (default 12:00:00)
+#   DOWNLOADER: downloader type (requests/IDM, default requests)
 
-set -euo pipefail
+# set -euo pipefail  # Temporarily disabled to debug srun issue
 
-YEARS="${1:-6}"  # Number of ICCV years to download (2013,2015,2017,2019,2021,2023)
+YEARS="${1:-6}"
 TIME_LIM="${2:-12:00:00}"
 DOWNLOADER="${3:-requests}"
 
@@ -13,7 +16,7 @@ BASE_SAVE_DIR="/ibex/user/suny0a/cvf_dataset/pdf"
 WORKDIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Download configuration
-TIME_STEP="${TIME_STEP:-5}"
+TIME_STEP="${TIME_STEP:-5}"  # seconds between downloads
 DOWNLOAD_MAIN="${DOWNLOAD_MAIN:-true}"
 DOWNLOAD_WORKSHOPS="${DOWNLOAD_WORKSHOPS:-true}"
 DOWNLOAD_SUPPLEMENT="${DOWNLOAD_SUPPLEMENT:-false}"
@@ -40,6 +43,7 @@ for year in "${ICCV_YEARS[@]}"; do
   fi
   
   echo "Submitting job for ICCV ${year}..."
+  echo "DEBUG: About to run srun command for year ${year}"
   
   srun \
     --ntasks=1 \
@@ -112,17 +116,17 @@ print(f'Completed ICCV ${year} download')
       echo 'ICCV ${year} download completed successfully'
     " &
     
+  echo "DEBUG: srun command submitted for year ${year}"
+  
   # Add a small delay between job submissions
   sleep 2
   ((count++))
   echo "Completed submission for ICCV ${year}, count is now ${count}"
 done
 
-echo "Finished all submissions, count is ${count}"
-
 echo "All ICCV download jobs submitted!"
 echo "Monitor progress with: squeue -u \$USER"
 echo "Check logs in: ${WORKDIR}/logs/"
-echo ""
-echo "Note: Jobs are running in background. Use 'squeue -u \$USER' to monitor progress."
-echo "Use 'wait' command if you want to wait for all jobs to complete."
+
+wait
+echo "All ICCV download jobs completed!"
