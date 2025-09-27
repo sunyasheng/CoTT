@@ -6,7 +6,7 @@
 #   TIME: time limit per job (default 12:00:00)
 #   DOWNLOADER: downloader type (requests/IDM, default requests)
 
-set -euo pipefail
+# set -euo pipefail  # Temporarily disabled to debug srun issue
 
 YEARS="${1:-6}"
 TIME_LIM="${2:-12:00:00}"
