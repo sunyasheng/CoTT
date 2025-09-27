@@ -50,39 +50,39 @@ for year in "${ICCV_YEARS[@]}"; do
     --output=logs/iccv_${year}.out \
     --error=logs/iccv_${year}.err \
     --unbuffered \
-    bash -lc "
+    bash -lc '
       set -euo pipefail
       
-      echo 'Starting download for ICCV ${year}...'
-      echo 'Save directory: ${BASE_SAVE_DIR}/ICCV_${year}'
-      echo 'Time step: ${TIME_STEP} seconds'
+      echo "Starting download for ICCV '"${year}"'..."
+      echo "Save directory: '"${BASE_SAVE_DIR}"'/ICCV_'"${year}"'"
+      echo "Time step: '"${TIME_STEP}"' seconds"
       
       # Activate conda environment
-      echo 'Activating conda environment: scientist.sh'
+      echo "Activating conda environment: scientist.sh"
       conda activate scientist.sh
       
-      cd ${WORKDIR}
+      cd '"${WORKDIR}"'
       
       # Create save directory
-      mkdir -p ${BASE_SAVE_DIR}/ICCV_${year}
+      mkdir -p '"${BASE_SAVE_DIR}"'/ICCV_'"${year}"'
       
       # Convert boolean strings to Python booleans
-      if [[ '${DOWNLOAD_MAIN}' == 'true' ]]; then
-        MAIN_BOOL='True'
+      if [[ "'"${DOWNLOAD_MAIN}"'" == "true" ]]; then
+        MAIN_BOOL="True"
       else
-        MAIN_BOOL='False'
+        MAIN_BOOL="False"
       fi
       
-      if [[ '${DOWNLOAD_WORKSHOPS}' == 'true' ]]; then
-        WORKSHOP_BOOL='True'
+      if [[ "'"${DOWNLOAD_WORKSHOPS}"'" == "true" ]]; then
+        WORKSHOP_BOOL="True"
       else
-        WORKSHOP_BOOL='False'
+        WORKSHOP_BOOL="False"
       fi
       
-      if [[ '${DOWNLOAD_SUPPLEMENT}' == 'true' ]]; then
-        SUPP_BOOL='True'
+      if [[ "'"${DOWNLOAD_SUPPLEMENT}"'" == "true" ]]; then
+        SUPP_BOOL="True"
       else
-        SUPP_BOOL='False'
+        SUPP_BOOL="False"
       fi
       
       # Run the download
