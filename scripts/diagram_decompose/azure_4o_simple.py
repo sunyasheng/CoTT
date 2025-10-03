@@ -176,7 +176,9 @@ Please provide your analysis in the following JSON format:
       "bbox": [x_min, y_min, x_max, y_max],
       "needs_crop": true/false,
       "crop_caption": "caption for GroundingDINO to extract this element (if needs_crop=true)",
-      "importance": "high|medium|low"
+      "importance": "high|medium|low",
+      "method_analysis": "Which method/approach this element represents and what it demonstrates (e.g., 'This shows the input image for Method A', 'This displays the results of our proposed approach', 'This is the ground truth for comparison')",
+      "semantic_meaning": "What this element means in the context of the research (e.g., 'Demonstrates the effectiveness of our method', 'Shows the baseline comparison', 'Illustrates the experimental setup')"
     }}
   ],
   "reconstruction_instructions": {{
@@ -202,7 +204,9 @@ IMPORTANT:
 - Use pixel coordinates (0 to {width-1} for x, 0 to {height-1} for y)
 - Be specific in crop captions for GroundingDINO
 - Provide clear, actionable reconstruction steps
-- Focus on elements that are essential for recreating the figure"""
+- Focus on elements that are essential for recreating the figure
+- For each element, provide detailed method_analysis and semantic_meaning to explain which method it represents and what it demonstrates in the research context
+- Make sure to identify and describe what each method/approach is showing (input, output, comparison, etc.)"""
                     },
                     {
                         "type": "image_url",
