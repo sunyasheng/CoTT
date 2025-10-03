@@ -24,3 +24,5 @@ debug/*
 
 workspace/*
 workspace
+*.env_old
+.env_old
