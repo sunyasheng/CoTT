@@ -26,3 +26,16 @@ workspace/*
 workspace
 *.env_old
 .env_old
+*.__pycache__
+*/__pycache__/*
+*json
+
+.env_old
+
+# Azure labeling files with API keys
+thirdparty/3_azure_labeling/azure_diagram_reasoning.py
+thirdparty/3_azure_labeling/azure_paper_analyzer.py
+thirdparty/3_azure_labeling/azure_qualitative_reasoning.py
+thirdparty/3_azure_labeling/paper_to_figure_reasoning.py
+thirdparty/3_azure_labeling/generate_image_prompts.py
+thirdparty/4_azure_identify_material/identify_qualitative_figures.py
