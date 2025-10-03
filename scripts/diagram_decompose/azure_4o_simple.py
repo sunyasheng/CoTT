@@ -142,9 +142,17 @@ def analyze_with_gpt4o(image_path: Path, cfg: Dict) -> Dict:
                 "content": [
                     {
                         "type": "text", 
-                        "text": f"""You are analyzing a scientific figure to understand its structure and create reconstruction instructions.
+                        "text": f"""You are analyzing a scientific figure from an academic paper to understand its structure and create reconstruction instructions.
 
 This image is {width}x{height} pixels.
+
+IMPORTANT: This is a paper figure that typically compares different methods or shows experimental results. Start with high-level semantic understanding:
+
+1. FIRST: Identify what this figure is comparing (methods, datasets, conditions, etc.)
+2. SECOND: Identify the methods/approaches being compared (look for method names like "Ours", "Baseline", "Method A", etc.)
+3. THIRD: Understand the experimental setup (input images, ground truth, different methods' outputs)
+4. FOURTH: Identify the grid structure (rows and columns) based on the semantic understanding
+5. FIFTH: Map each grid cell to its semantic meaning (which method, which condition, etc.)
 
 Your task is to:
 1. Identify all visual elements (panels, labels, arrows, legends, etc.)
