@@ -1,0 +1,23 @@
+.DS_Store
+arxiv_pdfs/
+arxiv-metadata-oai-snapshot.json
+__pycache__
+*/__pycache__/*
+debug/
+papers/
+scripts/gpt_function_calling_demo.py
+scripts/gpt_real_image_analysis.py
+scripts/gpt_labeling.py
+debug/*
+*.json
+*.jpg
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*secret*
+*key*
+*api_key*
+*password*
+*credential*
