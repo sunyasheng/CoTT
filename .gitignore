@@ -21,3 +21,6 @@ debug/*
 *api_key*
 *password*
 *credential*
+
+workspace/*
+workspace
