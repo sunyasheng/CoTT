@@ -26,6 +26,58 @@ import csv
 import requests
 from PIL import Image
 
+# 尝试导入 dotenv，如果没有则使用简单的环境变量加载
+try:
+    from dotenv import load_dotenv
+    HAS_DOTENV = True
+except ImportError:
+    HAS_DOTENV = False
+    print("⚠️ python-dotenv 未安装，使用简单环境变量加载")
+
+def load_env_vars():
+    """加载环境变量"""
+    # 尝试从多个位置加载 .env 文件
+    env_paths = [
+        Path(__file__).parent / ".env",  # 当前目录
+        Path(__file__).parent.parent / ".env",  # 上级目录
+        Path(__file__).parent.parent.parent / ".env",  # 根目录
+        Path(__file__).parent.parent.parent / ".env_old",  # 根目录的 .env_old
+    ]
+    
+    if HAS_DOTENV:
+        for env_path in env_paths:
+            if env_path.exists():
+                print(f"📄 加载环境变量: {env_path}")
+                load_dotenv(env_path)
+                return True
+    else:
+        # 简单的环境变量加载（从 .env_old 文件）
+        env_old_path = Path(__file__).parent.parent.parent / ".env_old"
+        if env_old_path.exists():
+            print(f"📄 从 .env_old 加载环境变量: {env_old_path}")
+            with open(env_old_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        os.environ[key] = value
+                
+                # 设置默认的 Azure OpenAI 配置（如果没有设置的话）
+                if not os.getenv("AZURE_OPENAI_ENDPOINT"):
+                    os.environ["AZURE_OPENAI_ENDPOINT"] = "https://linjl-ma65uv6u-eastus2.cognitiveservices.azure.com/"
+                if not os.getenv("AZURE_OPENAI_DEPLOYMENT"):
+                    os.environ["AZURE_OPENAI_DEPLOYMENT"] = "gpt-4o"
+                if not os.getenv("AZURE_OPENAI_API_VERSION"):
+                    os.environ["AZURE_OPENAI_API_VERSION"] = "2025-01-01-preview"
+                print(f"   ✅ 设置默认 Azure OpenAI 配置")
+            return True
+    
+    print("⚠️ 未找到环境变量文件")
+    return False
+
+# 加载环境变量
+load_env_vars()
+
 
 # Universal Chart Analysis Prompt
 UNIVERSAL_CHART_PROMPT = """
