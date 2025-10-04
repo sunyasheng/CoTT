@@ -160,6 +160,7 @@ LOCAL_HOST="$4"
 LOCAL_PDF_DIR="$5"
 LOCAL_OUT_DIR="$6"
 REMOTE_TEMP_DIR="$7"
+LOCAL_SSH_KEY="~/.ssh/id_rsa"
 PDF_LIST_FILE="/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
 
 echo "Shard ${SHARD_ID}: Processing indices ${START}-${END}"
