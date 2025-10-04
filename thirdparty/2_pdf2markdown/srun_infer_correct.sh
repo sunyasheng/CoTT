@@ -229,8 +229,7 @@ while IFS= read -r local_pdf; do
         # 每下载100个文件就处理一批
         if (( (++BATCH_COUNT) % BATCH_SIZE == 0 )); then
             echo "Processed ${BATCH_COUNT} files, starting batch processing..."
-            eval "$(conda shell.bash hook)" && conda activate gsam
-            python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/pdf" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999
+            /opt/conda/bin/conda run -n gsam python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/pdf" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999
             echo "Batch processing completed, continuing download..."
         fi
     fi
@@ -239,8 +238,7 @@ done < "${SHARD_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
 # 处理剩余的文件
 if (( BATCH_COUNT % BATCH_SIZE != 0 )); then
     echo "Processing remaining ${BATCH_COUNT} files..."
-    eval "$(conda shell.bash hook)" && conda activate gsam
-    python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/pdf" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999
+    /opt/conda/bin/conda run -n gsam python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/pdf" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999
 fi
 
 # 将处理结果上传回本地存储机器
