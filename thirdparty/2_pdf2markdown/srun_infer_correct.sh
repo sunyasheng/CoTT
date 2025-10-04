@@ -30,9 +30,20 @@ echo "远程临时目录: ${REMOTE_TEMP_DIR}"
 # 1. 从本地机器获取PDF文件列表
 echo "1. 从本地机器获取PDF文件列表..."
 PDF_LIST_FILE="/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
-ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_PDF_DIR}' -name '*.pdf' -type f" > "${PDF_LIST_FILE}"
+
+# 检查PDF列表文件是否已存在
+if [[ -f "${PDF_LIST_FILE}" ]]; then
+    echo "✓ PDF列表文件已存在，跳过生成步骤"
+    echo "  文件大小: $(du -h "${PDF_LIST_FILE}" | cut -f1)"
+    echo "  文件行数: $(wc -l < "${PDF_LIST_FILE}")"
+else
+    echo "  正在生成PDF文件列表，这可能需要几分钟时间..."
+    ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_PDF_DIR}' -name '*.pdf' -type f" > "${PDF_LIST_FILE}"
+    echo "✓ PDF文件列表生成完成"
+fi
 
 # Count total PDFs with deduplication
+echo "2. 统计PDF文件数量并去重..."
 COUNT_ALL=$(python3 - <<PY
 from pathlib import Path
 import re
@@ -65,6 +76,7 @@ random.shuffle(deduped_pdfs)
 print(len(deduped_pdfs))
 PY
 )
+echo "✓ PDF统计完成，去重后共 ${COUNT_ALL} 个文件"
 
 if [[ "$COUNT_ALL" -eq 0 ]]; then
   echo "No PDF files found under ${LOCAL_PDF_DIR}" >&2
@@ -78,6 +90,7 @@ fi
 PER_SHARD=$(( (TOTAL + SHARDS - 1) / SHARDS ))
 
 # Count existing outputs
+echo "3. 检查已处理的文件..."
 EXISTING=$(python3 - <<PY
 from pathlib import Path
 import re
@@ -121,12 +134,14 @@ for pdf in deduped_pdfs[:${TOTAL}]:
 print(existing)
 PY
 )
+echo "✓ 已处理文件检查完成，共 ${EXISTING} 个文件已处理"
 
 echo "Found ${COUNT_ALL} unique papers (deduplicated)"
 echo "Found ${EXISTING}/${TOTAL} PDFs already processed in ${LOCAL_OUT_DIR}"
 echo "Launching ${SHARDS} shards over all ${TOTAL} unique papers (≈${PER_SHARD}/shard) using 16 GPUs"
 
 # 创建处理脚本
+echo "4. 创建处理脚本..."
 PROCESS_SCRIPT="/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh"
 cat > "${PROCESS_SCRIPT}" << 'EOF'
 #!/bin/bash
@@ -219,21 +234,25 @@ echo "Shard ${SHARD_ID} completed"
 EOF
 
 chmod +x "${PROCESS_SCRIPT}"
+echo "✓ 处理脚本创建完成"
 
 # Ensure logs directory exists for Slurm output files
+echo "5. 创建日志目录..."
 mkdir -p logs
+echo "✓ 日志目录创建完成"
 
+echo "6. 启动Slurm任务..."
 for (( i=0; i<SHARDS; i++ )); do
   START=$(( i * PER_SHARD + 1 ))
   END=$(( (i + 1) * PER_SHARD ))
   if (( END > TOTAL )); then END=${TOTAL}; fi
 
   if (( START > END )); then
-    echo "Shard ${i} empty (start ${START} > end ${END}), skipping"
+    echo "  Shard ${i} empty (start ${START} > end ${END}), skipping"
     continue
   fi
 
-  echo "Shard ${i}: indices ${START}-${END}"
+  echo "  启动 Shard ${i}: indices ${START}-${END}"
 
   srun \
     --gpus=1 \
@@ -250,7 +269,7 @@ for (( i=0; i<SHARDS; i++ )); do
 done
 
 wait
-echo "All shards submitted and completed."
+echo "✓ 所有任务已提交并完成"
 
 # 清理本地临时文件
 rm -f "${PDF_LIST_FILE}"
