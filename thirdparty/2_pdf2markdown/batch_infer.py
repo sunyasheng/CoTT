@@ -94,9 +94,9 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
                 "-o", str(out_dir),
                 "--backend", "vlm-vllm-engine",
                 "--device", "cuda",
-                "--max-num-seqs", "4",  # 减少并发数，适合V100
+                "--max-num-seqs", "8",  # 增加并发数，适合A100
                 "--max-model-len", "12288",  # 保持原始值，避免bug
-                "--gpu-memory-utilization", "0.8"  # 增加显存利用率
+                "--gpu-memory-utilization", "0.9"  # 提高显存利用率，适合A100
             ]
             
             print(f"Processing batch of {len(remaining_pdfs)} PDFs with single model load...")
