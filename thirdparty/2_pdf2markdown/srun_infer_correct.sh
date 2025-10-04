@@ -91,6 +91,12 @@ PER_SHARD=$(( (TOTAL + SHARDS - 1) / SHARDS ))
 
 # Count existing outputs
 echo "3. 检查已处理的文件..."
+echo "  使用批量检查方式，这会更快..."
+
+# 先在远程机器上生成所有可能的输出文件列表
+echo "  生成输出文件列表..."
+ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_OUT_DIR}' -name '*.md' -type f" > "/ibex/user/suny0a/arxiv_dataset/existing_md_files.txt"
+
 EXISTING=$(python3 - <<PY
 from pathlib import Path
 import re
@@ -98,6 +104,10 @@ import re
 # 读取本地PDF文件列表
 with open('${PDF_LIST_FILE}', 'r') as f:
     all_pdfs = [line.strip() for line in f if line.strip()]
+
+# 读取已存在的markdown文件列表
+with open('/ibex/user/suny0a/arxiv_dataset/existing_md_files.txt', 'r') as f:
+    existing_md_files = set(line.strip() for line in f if line.strip())
 
 # Deduplicate by paper ID
 paper_groups = {}
@@ -120,16 +130,12 @@ import random
 random.seed(42)  # Fixed seed for reproducibility
 random.shuffle(deduped_pdfs)
 
-# Check how many already have markdown output
+# Check how many already have markdown output (本地检查，不需要SSH)
 existing = 0
 for pdf in deduped_pdfs[:${TOTAL}]:
     pdf_stem = Path(pdf).stem
     expected_md_file = f"${LOCAL_OUT_DIR}/{pdf_stem}/vlm/{pdf_stem}.md"
-    # 检查本地文件是否存在
-    import subprocess
-    result = subprocess.run(['ssh', '-i', '${LOCAL_SSH_KEY}', '${LOCAL_HOST}', f"test -f '{expected_md_file}' && echo 'exists' || echo 'not_exists'"], 
-                          capture_output=True, text=True)
-    if result.stdout.strip() == 'exists':
+    if expected_md_file in existing_md_files:
         existing += 1
 print(existing)
 PY
@@ -274,3 +280,4 @@ echo "✓ 所有任务已提交并完成"
 # 清理本地临时文件
 rm -f "${PDF_LIST_FILE}"
 rm -f "${PROCESS_SCRIPT}"
+rm -f "/ibex/user/suny0a/arxiv_dataset/existing_md_files.txt"
