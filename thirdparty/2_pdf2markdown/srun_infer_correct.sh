@@ -14,7 +14,9 @@ LOCAL_PDF_DIR="/home/suny0a/arxiv_dataset/pdf/"
 LOCAL_OUT_DIR="/home/suny0a/arxiv_dataset/md/"
 
 # 远程机器临时目录（计算节点）
-REMOTE_TEMP_DIR="/ibex/user/suny0a/arxiv_dataset/temp_processing_$$"
+# 使用主机名+时间戳+进程ID确保唯一性
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+REMOTE_TEMP_DIR="/ibex/user/suny0a/arxiv_dataset/temp_processing_$(hostname)_${TIMESTAMP}_$$"
 
 # Sharding config
 TOTAL=0  # 0 means process all PDFs
@@ -28,7 +30,8 @@ echo "远程临时目录: ${REMOTE_TEMP_DIR}"
 
 # 1. 从本地机器获取PDF文件列表
 echo "1. 从本地机器获取PDF文件列表..."
-ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_PDF_DIR}' -name '*.pdf' -type f" > "/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
+PDF_LIST_FILE="/ibex/user/suny0a/arxiv_dataset/pdf_list_$(hostname)_${TIMESTAMP}_$$.txt"
+ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_PDF_DIR}' -name '*.pdf' -type f" > "${PDF_LIST_FILE}"
 
 # Count total PDFs with deduplication
 COUNT_ALL=$(python3 - <<PY
@@ -36,7 +39,7 @@ from pathlib import Path
 import re
 
 # 读取本地PDF文件列表
-with open('/ibex/user/suny0a/arxiv_dataset/pdf_list.txt', 'r') as f:
+with open('${PDF_LIST_FILE}', 'r') as f:
     all_pdfs = [line.strip() for line in f if line.strip()]
 
 # Deduplicate by paper ID (same logic as batch script)
@@ -81,7 +84,7 @@ from pathlib import Path
 import re
 
 # 读取本地PDF文件列表
-with open('/ibex/user/suny0a/arxiv_dataset/pdf_list.txt', 'r') as f:
+with open('${PDF_LIST_FILE}', 'r') as f:
     all_pdfs = [line.strip() for line in f if line.strip()]
 
 # Deduplicate by paper ID
@@ -125,7 +128,8 @@ echo "Found ${EXISTING}/${TOTAL} PDFs already processed in ${LOCAL_OUT_DIR}"
 echo "Launching ${SHARDS} shards over all ${TOTAL} unique papers (≈${PER_SHARD}/shard) using 16 GPUs"
 
 # 创建处理脚本
-cat > "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh" << 'EOF'
+PROCESS_SCRIPT="/ibex/user/suny0a/arxiv_dataset/process_shard_correct_$(hostname)_${TIMESTAMP}_$$.sh"
+cat > "${PROCESS_SCRIPT}" << 'EOF'
 #!/bin/bash
 set -euo pipefail
 
@@ -149,7 +153,7 @@ from pathlib import Path
 import re
 
 # 读取本地PDF文件列表
-with open('/ibex/user/suny0a/arxiv_dataset/pdf_list.txt', 'r') as f:
+with open('${PDF_LIST_FILE}', 'r') as f:
     all_pdfs = [line.strip() for line in f if line.strip()]
 
 # Deduplicate by paper ID
@@ -214,7 +218,7 @@ rm -rf "${REMOTE_TEMP_DIR}"
 echo "Shard ${SHARD_ID} completed"
 EOF
 
-chmod +x "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh"
+chmod +x "${PROCESS_SCRIPT}"
 
 # Ensure logs directory exists for Slurm output files
 mkdir -p logs
@@ -242,12 +246,12 @@ for (( i=0; i<SHARDS; i++ )); do
     --output=logs/mineru_${START}_${END}.out \
     --error=logs/mineru_${START}_${END}.err \
     --unbuffered \
-    bash -lc "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh ${i} ${START} ${END} '${LOCAL_HOST}' '${LOCAL_PDF_DIR}' '${LOCAL_OUT_DIR}' '${REMOTE_TEMP_DIR}'" &
+    bash -lc "${PROCESS_SCRIPT} ${i} ${START} ${END} '${LOCAL_HOST}' '${LOCAL_PDF_DIR}' '${LOCAL_OUT_DIR}' '${REMOTE_TEMP_DIR}'" &
 done
 
 wait
 echo "All shards submitted and completed."
 
 # 清理本地临时文件
-rm -f "/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
-rm -f "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh"
+rm -f "${PDF_LIST_FILE}"
+rm -f "${PROCESS_SCRIPT}"
