@@ -229,7 +229,9 @@ while IFS= read -r local_pdf; do
         # 每下载100个文件就处理一批
         if (( (++BATCH_COUNT) % BATCH_SIZE == 0 )); then
             echo "Processed ${BATCH_COUNT} files, starting batch processing..."
-            bash -c "source ~/.bashrc && conda activate gsam && python3 /home/suny0a/Proj/CoTT/thirdparty/2_pdf2markdown/batch_infer.py --root ${SHARD_TEMP_DIR}/pdf --outdir ${SHARD_TEMP_DIR}/md --start 1 --end 999999"
+            # 计算当前下载目录中的PDF文件数量
+            PDF_COUNT=$(find "${SHARD_TEMP_DIR}/pdf" -name "*.pdf" | wc -l)
+            bash -c "source ~/.bashrc && conda activate gsam && python3 /home/suny0a/Proj/CoTT/thirdparty/2_pdf2markdown/batch_infer.py --root ${SHARD_TEMP_DIR}/pdf --outdir ${SHARD_TEMP_DIR}/md --start 1 --end ${PDF_COUNT}"
             echo "Batch processing completed, continuing download..."
         fi
     fi
@@ -238,7 +240,9 @@ done < "${SHARD_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
 # 处理剩余的文件
 if (( BATCH_COUNT % BATCH_SIZE != 0 )); then
     echo "Processing remaining ${BATCH_COUNT} files..."
-    bash -c "source ~/.bashrc && conda activate gsam && python3 /home/suny0a/Proj/CoTT/thirdparty/2_pdf2markdown/batch_infer.py --root ${SHARD_TEMP_DIR}/pdf --outdir ${SHARD_TEMP_DIR}/md --start 1 --end 999999"
+    # 计算最终下载目录中的PDF文件数量
+    PDF_COUNT=$(find "${SHARD_TEMP_DIR}/pdf" -name "*.pdf" | wc -l)
+    bash -c "source ~/.bashrc && conda activate gsam && python3 /home/suny0a/Proj/CoTT/thirdparty/2_pdf2markdown/batch_infer.py --root ${SHARD_TEMP_DIR}/pdf --outdir ${SHARD_TEMP_DIR}/md --start 1 --end ${PDF_COUNT}"
 fi
 
 # 将处理结果上传回本地存储机器
