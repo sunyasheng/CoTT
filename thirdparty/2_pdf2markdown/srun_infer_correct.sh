@@ -14,9 +14,8 @@ LOCAL_PDF_DIR="/home/suny0a/arxiv_dataset/pdf/"
 LOCAL_OUT_DIR="/home/suny0a/arxiv_dataset/md/"
 
 # 远程机器临时目录（计算节点）
-# 使用主机名+时间戳+进程ID确保唯一性
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-REMOTE_TEMP_DIR="/ibex/user/suny0a/arxiv_dataset/temp_processing_$(hostname)_${TIMESTAMP}_$$"
+# 使用shard ID确保唯一性
+REMOTE_TEMP_DIR="/ibex/user/suny0a/arxiv_dataset/temp_processing_shard"
 
 # Sharding config
 TOTAL=0  # 0 means process all PDFs
@@ -30,7 +29,7 @@ echo "远程临时目录: ${REMOTE_TEMP_DIR}"
 
 # 1. 从本地机器获取PDF文件列表
 echo "1. 从本地机器获取PDF文件列表..."
-PDF_LIST_FILE="/ibex/user/suny0a/arxiv_dataset/pdf_list_$(hostname)_${TIMESTAMP}_$$.txt"
+PDF_LIST_FILE="/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
 ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_PDF_DIR}' -name '*.pdf' -type f" > "${PDF_LIST_FILE}"
 
 # Count total PDFs with deduplication
@@ -128,7 +127,7 @@ echo "Found ${EXISTING}/${TOTAL} PDFs already processed in ${LOCAL_OUT_DIR}"
 echo "Launching ${SHARDS} shards over all ${TOTAL} unique papers (≈${PER_SHARD}/shard) using 16 GPUs"
 
 # 创建处理脚本
-PROCESS_SCRIPT="/ibex/user/suny0a/arxiv_dataset/process_shard_correct_$(hostname)_${TIMESTAMP}_$$.sh"
+PROCESS_SCRIPT="/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh"
 cat > "${PROCESS_SCRIPT}" << 'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -143,12 +142,13 @@ REMOTE_TEMP_DIR="$7"
 
 echo "Shard ${SHARD_ID}: Processing indices ${START}-${END}"
 
-# 在远程机器上创建临时目录
-mkdir -p "${REMOTE_TEMP_DIR}/pdf"
-mkdir -p "${REMOTE_TEMP_DIR}/md"
+# 在远程机器上创建shard专用的临时目录
+SHARD_TEMP_DIR="${REMOTE_TEMP_DIR}_${SHARD_ID}"
+mkdir -p "${SHARD_TEMP_DIR}/pdf"
+mkdir -p "${SHARD_TEMP_DIR}/md"
 
 # 获取需要处理的PDF文件列表
-python3 - <<PY > "${REMOTE_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
+python3 - <<PY > "${SHARD_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
 from pathlib import Path
 import re
 
@@ -189,7 +189,7 @@ while IFS= read -r local_pdf; do
         # 计算相对路径
         relative_path="${local_pdf#${LOCAL_PDF_DIR}}"
         relative_path="${relative_path#/}"  # 移除开头的斜杠
-        remote_pdf="${REMOTE_TEMP_DIR}/pdf/${relative_path}"
+        remote_pdf="${SHARD_TEMP_DIR}/pdf/${relative_path}"
         
         # 确保远程目录存在
         mkdir -p "$(dirname "$remote_pdf")"
@@ -198,22 +198,22 @@ while IFS= read -r local_pdf; do
         echo "Downloading: ${LOCAL_HOST}:${local_pdf} -> ${remote_pdf}"
         scp -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}:${local_pdf}" "$remote_pdf"
     fi
-done < "${REMOTE_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
+done < "${SHARD_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
 
 # 在远程机器上运行MinerU处理
 echo "Running MinerU on remote compute node..."
 conda activate gsam
 
 # 使用修改后的batch_infer.py，处理远程临时目录中的文件
-python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${REMOTE_TEMP_DIR}/pdf" --outdir "${REMOTE_TEMP_DIR}/md" --start 1 --end 999999
+python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/pdf" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999
 
 # 将处理结果上传回本地存储机器
 echo "Uploading results back to local storage..."
-rsync -av -e "ssh -i ${LOCAL_SSH_KEY}" "${REMOTE_TEMP_DIR}/md/" "${LOCAL_HOST}:${LOCAL_OUT_DIR}/"
+rsync -av -e "ssh -i ${LOCAL_SSH_KEY}" "${SHARD_TEMP_DIR}/md/" "${LOCAL_HOST}:${LOCAL_OUT_DIR}/"
 
 # 清理远程临时目录
 echo "Cleaning up remote temporary directory..."
-rm -rf "${REMOTE_TEMP_DIR}"
+rm -rf "${SHARD_TEMP_DIR}"
 
 echo "Shard ${SHARD_ID} completed"
 EOF
