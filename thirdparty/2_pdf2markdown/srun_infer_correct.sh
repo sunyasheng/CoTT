@@ -222,9 +222,20 @@ while IFS= read -r local_pdf; do
         # 确保远程目录存在
         mkdir -p "$(dirname "$remote_pdf")"
         
-        # 从本地机器下载文件到远程机器
+        # 从本地机器下载文件到远程机器（带重试机制）
         echo "Downloading: ${LOCAL_HOST}:${local_pdf} -> ${remote_pdf}"
-        scp -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}:${local_pdf}" "$remote_pdf"
+        for retry in {1..3}; do
+            if scp -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}:${local_pdf}" "$remote_pdf"; then
+                break
+            else
+                echo "Download failed (attempt ${retry}/3), retrying in 5 seconds..."
+                sleep 5
+                if [ $retry -eq 3 ]; then
+                    echo "Failed to download after 3 attempts: ${local_pdf}"
+                    exit 1
+                fi
+            fi
+        done
         
         # 每下载100个文件就处理一批
         if (( (++BATCH_COUNT) % BATCH_SIZE == 0 )); then
@@ -245,9 +256,20 @@ if (( BATCH_COUNT % BATCH_SIZE != 0 )); then
     bash -c "source ~/.bashrc && conda activate gsam && python3 /home/suny0a/Proj/CoTT/thirdparty/2_pdf2markdown/batch_infer.py --root ${SHARD_TEMP_DIR}/pdf --outdir ${SHARD_TEMP_DIR}/md --start 1 --end ${PDF_COUNT}"
 fi
 
-# 将处理结果上传回本地存储机器
+# 将处理结果上传回本地存储机器（带重试机制）
 echo "Uploading results back to local storage..."
-rsync -av -e "ssh -i ${LOCAL_SSH_KEY}" "${SHARD_TEMP_DIR}/md/" "${LOCAL_HOST}:${LOCAL_OUT_DIR}/"
+for retry in {1..3}; do
+    if rsync -av -e "ssh -i ${LOCAL_SSH_KEY}" "${SHARD_TEMP_DIR}/md/" "${LOCAL_HOST}:${LOCAL_OUT_DIR}/"; then
+        break
+    else
+        echo "Upload failed (attempt ${retry}/3), retrying in 5 seconds..."
+        sleep 5
+        if [ $retry -eq 3 ]; then
+            echo "Failed to upload after 3 attempts"
+            exit 1
+        fi
+    fi
+done
 
 # 清理远程临时目录
 echo "Cleaning up remote temporary directory..."
@@ -289,6 +311,9 @@ for (( i=0; i<SHARDS; i++ )); do
     --error=logs/mineru_${START}_${END}.err \
     --unbuffered \
     bash -lc "${PROCESS_SCRIPT} ${i} ${START} ${END} '${LOCAL_HOST}' '${LOCAL_PDF_DIR}' '${LOCAL_OUT_DIR}' '${REMOTE_TEMP_DIR}'" &
+  
+  # 添加延迟避免SSH连接冲突
+  sleep 2
 done
 
 wait
