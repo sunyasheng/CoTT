@@ -205,30 +205,59 @@ for pdf in deduped_pdfs[${START}-1:${END}]:
     print(pdf)
 PY
 
-# 从本地机器下载需要处理的PDF文件到远程机器
-echo "Downloading PDF files from local storage to remote compute node..."
+# 边下载边处理的优化方案
+echo "Starting parallel download and processing..."
+
+# 创建下载和处理脚本
+cat > "${SHARD_TEMP_DIR}/download_and_process.sh" << 'DOWNLOAD_EOF'
+#!/bin/bash
+set -euo pipefail
+
+SHARD_TEMP_DIR="$1"
+LOCAL_HOST="$2"
+LOCAL_PDF_DIR="$3"
+LOCAL_SSH_KEY="$4"
+PDF_LIST_FILE="$5"
+
+# 创建处理队列目录
+mkdir -p "${SHARD_TEMP_DIR}/queue"
+mkdir -p "${SHARD_TEMP_DIR}/processing"
+mkdir -p "${SHARD_TEMP_DIR}/completed"
+
+# 启动MinerU处理进程（后台运行）
+conda activate gsam
+python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/queue" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999 &
+MINERU_PID=$!
+
+# 下载PDF文件到队列目录
+echo "Starting PDF download..."
 while IFS= read -r local_pdf; do
     if [[ -n "$local_pdf" ]]; then
         # 计算相对路径
         relative_path="${local_pdf#${LOCAL_PDF_DIR}}"
         relative_path="${relative_path#/}"  # 移除开头的斜杠
-        remote_pdf="${SHARD_TEMP_DIR}/pdf/${relative_path}"
+        remote_pdf="${SHARD_TEMP_DIR}/queue/${relative_path}"
         
         # 确保远程目录存在
         mkdir -p "$(dirname "$remote_pdf")"
         
-        # 从本地机器下载文件到远程机器
+        # 从本地机器下载文件到队列目录
         echo "Downloading: ${LOCAL_HOST}:${local_pdf} -> ${remote_pdf}"
         scp -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}:${local_pdf}" "$remote_pdf"
+        
+        # 移动文件到处理目录（触发MinerU处理）
+        mv "$remote_pdf" "${SHARD_TEMP_DIR}/processing/"
     fi
-done < "${SHARD_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
+done < "${PDF_LIST_FILE}"
 
-# 在远程机器上运行MinerU处理
-echo "Running MinerU on remote compute node..."
-conda activate gsam
+# 等待MinerU处理完成
+wait $MINERU_PID
+DOWNLOAD_EOF
 
-# 使用修改后的batch_infer.py，处理远程临时目录中的文件
-python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${SHARD_TEMP_DIR}/pdf" --outdir "${SHARD_TEMP_DIR}/md" --start 1 --end 999999
+chmod +x "${SHARD_TEMP_DIR}/download_and_process.sh"
+
+# 运行下载和处理脚本
+"${SHARD_TEMP_DIR}/download_and_process.sh" "${SHARD_TEMP_DIR}" "${LOCAL_HOST}" "${LOCAL_PDF_DIR}" "${LOCAL_SSH_KEY}" "${SHARD_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
 
 # 将处理结果上传回本地存储机器
 echo "Uploading results back to local storage..."
