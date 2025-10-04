@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+
+# 正确的远程处理逻辑：
+# 本地机器(suny0a@10.64.75.69): 存储PDF文件和输出结果
+# 远程机器(集群节点): 提供GPU计算资源
+# 工作流程: 本地读取 → 远程处理 → 本地保存
+
+set -euo pipefail
+
+# 本地机器配置（存储机器）
+LOCAL_HOST="suny0a@10.64.74.69"
+LOCAL_SSH_KEY="~/.ssh/id_rsa"
+LOCAL_PDF_DIR="/home/suny0a/arxiv_dataset/pdf/"
+LOCAL_OUT_DIR="/home/suny0a/arxiv_dataset/md/"
+
+# 远程机器临时目录（计算节点）
+REMOTE_TEMP_DIR="/ibex/user/suny0a/arxiv_dataset/temp_processing_$$"
+
+# Sharding config
+TOTAL=0  # 0 means process all PDFs
+SHARDS=16  # 16张GPU卡，支持16个并发任务
+
+echo "=== 远程计算资源处理本地存储文件 ==="
+echo "本地存储机器: ${LOCAL_HOST}"
+echo "PDF目录: ${LOCAL_PDF_DIR}"
+echo "输出目录: ${LOCAL_OUT_DIR}"
+echo "远程临时目录: ${REMOTE_TEMP_DIR}"
+
+# 1. 从本地机器获取PDF文件列表
+echo "1. 从本地机器获取PDF文件列表..."
+ssh -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}" "find '${LOCAL_PDF_DIR}' -name '*.pdf' -type f" > "/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
+
+# Count total PDFs with deduplication
+COUNT_ALL=$(python3 - <<PY
+from pathlib import Path
+import re
+
+# 读取本地PDF文件列表
+with open('/ibex/user/suny0a/arxiv_dataset/pdf_list.txt', 'r') as f:
+    all_pdfs = [line.strip() for line in f if line.strip()]
+
+# Deduplicate by paper ID (same logic as batch script)
+paper_groups = {}
+for pdf_path in all_pdfs:
+    filename = Path(pdf_path).name
+    match = re.match(r'(\d{4}\.\d{4,5})', filename)
+    if match:
+        paper_id = match.group(1)
+        if paper_id not in paper_groups:
+            paper_groups[paper_id] = []
+        paper_groups[paper_id].append(pdf_path)
+
+deduped_pdfs = []
+for paper_id, versions in sorted(paper_groups.items()):
+    versions.sort()
+    deduped_pdfs.append(versions[0])
+
+# Shuffle for better load balancing across shards
+import random
+random.seed(42)  # Fixed seed for reproducibility
+random.shuffle(deduped_pdfs)
+
+print(len(deduped_pdfs))
+PY
+)
+
+if [[ "$COUNT_ALL" -eq 0 ]]; then
+  echo "No PDF files found under ${LOCAL_PDF_DIR}" >&2
+  exit 2
+fi
+
+if [[ "$TOTAL" -eq 0 ]] || [[ "$TOTAL" -gt "$COUNT_ALL" ]]; then
+  TOTAL="$COUNT_ALL"
+fi
+
+PER_SHARD=$(( (TOTAL + SHARDS - 1) / SHARDS ))
+
+# Count existing outputs
+EXISTING=$(python3 - <<PY
+from pathlib import Path
+import re
+
+# 读取本地PDF文件列表
+with open('/ibex/user/suny0a/arxiv_dataset/pdf_list.txt', 'r') as f:
+    all_pdfs = [line.strip() for line in f if line.strip()]
+
+# Deduplicate by paper ID
+paper_groups = {}
+for pdf_path in all_pdfs:
+    filename = Path(pdf_path).name
+    match = re.match(r'(\d{4}\.\d{4,5})', filename)
+    if match:
+        paper_id = match.group(1)
+        if paper_id not in paper_groups:
+            paper_groups[paper_id] = []
+        paper_groups[paper_id].append(pdf_path)
+
+deduped_pdfs = []
+for paper_id, versions in sorted(paper_groups.items()):
+    versions.sort()
+    deduped_pdfs.append(versions[0])
+
+# Shuffle for better load balancing across shards
+import random
+random.seed(42)  # Fixed seed for reproducibility
+random.shuffle(deduped_pdfs)
+
+# Check how many already have markdown output
+existing = 0
+for pdf in deduped_pdfs[:${TOTAL}]:
+    pdf_stem = Path(pdf).stem
+    expected_md_file = f"${LOCAL_OUT_DIR}/{pdf_stem}/vlm/{pdf_stem}.md"
+    # 检查本地文件是否存在
+    import subprocess
+    result = subprocess.run(['ssh', '-i', '${LOCAL_SSH_KEY}', '${LOCAL_HOST}', f"test -f '{expected_md_file}' && echo 'exists' || echo 'not_exists'"], 
+                          capture_output=True, text=True)
+    if result.stdout.strip() == 'exists':
+        existing += 1
+print(existing)
+PY
+)
+
+echo "Found ${COUNT_ALL} unique papers (deduplicated)"
+echo "Found ${EXISTING}/${TOTAL} PDFs already processed in ${LOCAL_OUT_DIR}"
+echo "Launching ${SHARDS} shards over all ${TOTAL} unique papers (≈${PER_SHARD}/shard) using 16 GPUs"
+
+# 创建处理脚本
+cat > "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh" << 'EOF'
+#!/bin/bash
+set -euo pipefail
+
+SHARD_ID=$1
+START=$2
+END=$3
+LOCAL_HOST="$4"
+LOCAL_PDF_DIR="$5"
+LOCAL_OUT_DIR="$6"
+REMOTE_TEMP_DIR="$7"
+
+echo "Shard ${SHARD_ID}: Processing indices ${START}-${END}"
+
+# 在远程机器上创建临时目录
+mkdir -p "${REMOTE_TEMP_DIR}/pdf"
+mkdir -p "${REMOTE_TEMP_DIR}/md"
+
+# 获取需要处理的PDF文件列表
+python3 - <<PY > "${REMOTE_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
+from pathlib import Path
+import re
+
+# 读取本地PDF文件列表
+with open('/ibex/user/suny0a/arxiv_dataset/pdf_list.txt', 'r') as f:
+    all_pdfs = [line.strip() for line in f if line.strip()]
+
+# Deduplicate by paper ID
+paper_groups = {}
+for pdf_path in all_pdfs:
+    filename = Path(pdf_path).name
+    match = re.match(r'(\d{4}\.\d{4,5})', filename)
+    if match:
+        paper_id = match.group(1)
+        if paper_id not in paper_groups:
+            paper_groups[paper_id] = []
+        paper_groups[paper_id].append(pdf_path)
+
+deduped_pdfs = []
+for paper_id, versions in sorted(paper_groups.items()):
+    versions.sort()
+    deduped_pdfs.append(versions[0])
+
+# Shuffle for better load balancing across shards
+import random
+random.seed(42)  # Fixed seed for reproducibility
+random.shuffle(deduped_pdfs)
+
+# 输出指定范围的PDF文件
+for pdf in deduped_pdfs[${START}-1:${END}]:
+    print(pdf)
+PY
+
+# 从本地机器下载需要处理的PDF文件到远程机器
+echo "Downloading PDF files from local storage to remote compute node..."
+while IFS= read -r local_pdf; do
+    if [[ -n "$local_pdf" ]]; then
+        # 计算相对路径
+        relative_path="${local_pdf#${LOCAL_PDF_DIR}}"
+        relative_path="${relative_path#/}"  # 移除开头的斜杠
+        remote_pdf="${REMOTE_TEMP_DIR}/pdf/${relative_path}"
+        
+        # 确保远程目录存在
+        mkdir -p "$(dirname "$remote_pdf")"
+        
+        # 从本地机器下载文件到远程机器
+        echo "Downloading: ${LOCAL_HOST}:${local_pdf} -> ${remote_pdf}"
+        scp -i "${LOCAL_SSH_KEY}" "${LOCAL_HOST}:${local_pdf}" "$remote_pdf"
+    fi
+done < "${REMOTE_TEMP_DIR}/shard_${SHARD_ID}_pdfs.txt"
+
+# 在远程机器上运行MinerU处理
+echo "Running MinerU on remote compute node..."
+conda activate gsam
+
+# 使用修改后的batch_infer.py，处理远程临时目录中的文件
+python3 thirdparty/2_pdf_parsing/batch_infer.py --root "${REMOTE_TEMP_DIR}/pdf" --outdir "${REMOTE_TEMP_DIR}/md" --start 1 --end 999999
+
+# 将处理结果上传回本地存储机器
+echo "Uploading results back to local storage..."
+rsync -av -e "ssh -i ${LOCAL_SSH_KEY}" "${REMOTE_TEMP_DIR}/md/" "${LOCAL_HOST}:${LOCAL_OUT_DIR}/"
+
+# 清理远程临时目录
+echo "Cleaning up remote temporary directory..."
+rm -rf "${REMOTE_TEMP_DIR}"
+
+echo "Shard ${SHARD_ID} completed"
+EOF
+
+chmod +x "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh"
+
+# Ensure logs directory exists for Slurm output files
+mkdir -p logs
+
+for (( i=0; i<SHARDS; i++ )); do
+  START=$(( i * PER_SHARD + 1 ))
+  END=$(( (i + 1) * PER_SHARD ))
+  if (( END > TOTAL )); then END=${TOTAL}; fi
+
+  if (( START > END )); then
+    echo "Shard ${i} empty (start ${START} > end ${END}), skipping"
+    continue
+  fi
+
+  echo "Shard ${i}: indices ${START}-${END}"
+
+  srun \
+    --gpus=1 \
+    --ntasks=1 \
+    --cpus-per-task=4 \
+    --mem=64G \
+    --time=96:00:00 \
+    --constraint=a100 \
+    --job-name=mineru_${START}_${END} \
+    --output=logs/mineru_${START}_${END}.out \
+    --error=logs/mineru_${START}_${END}.err \
+    --unbuffered \
+    bash -lc "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh ${i} ${START} ${END} '${LOCAL_HOST}' '${LOCAL_PDF_DIR}' '${LOCAL_OUT_DIR}' '${REMOTE_TEMP_DIR}'" &
+done
+
+wait
+echo "All shards submitted and completed."
+
+# 清理本地临时文件
+rm -f "/ibex/user/suny0a/arxiv_dataset/pdf_list.txt"
+rm -f "/ibex/user/suny0a/arxiv_dataset/process_shard_correct.sh"
