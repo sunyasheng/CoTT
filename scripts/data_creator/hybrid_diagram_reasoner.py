@@ -119,9 +119,10 @@ class HybridDiagramReasoner:
                 print("❌ Azure Identity not available for Papyrus API")
                 return False
             
-            self.papyrus_endpoint = "https://WestUS2Large.papyrus.binginternal.com/chat/completions"
-            self.verify_scope = "api://5fe538a8-15d5-4a84-961e-be66cd036687/.default"
-            self.client_id = "d5702df1-96d9-4195-83a3-e44d8b0a0601"
+            # 从环境变量或默认值获取Papyrus配置
+            self.papyrus_endpoint = os.getenv("PAPYRUS_ENDPOINT", "https://WestUS2Large.papyrus.binginternal.com/chat/completions")
+            self.verify_scope = os.getenv("PAPYRUS_VERIFY_SCOPE", "api://5fe538a8-15d5-4a84-961e-be66cd036687/.default")
+            self.client_id = os.getenv("PAPYRUS_CLIENT_ID", "d5702df1-96d9-4195-83a3-e44d8b0a0601")
             
             # 尝试不同的认证方式
             self.access_token = None
@@ -182,9 +183,9 @@ class HybridDiagramReasoner:
             return {
                 "Authorization": f"Bearer {self.access_token}",
                 "Content-Type": "application/json",
-                "papyrus-model-name": "gpt4ovision-batch",
-                "papyrus-timeout-ms": "30000",
-                "papyrus-quota-id": "msftaicopilot/windowsdata",
+                "papyrus-model-name": os.getenv("PAPYRUS_MODEL_NAME", "gpt4ovision-batch"),
+                "papyrus-timeout-ms": os.getenv("PAPYRUS_TIMEOUT_MS", "30000"),
+                "papyrus-quota-id": os.getenv("PAPYRUS_QUOTA_ID", "msftaicopilot/windowsdata"),
             }
         return {}
     
@@ -553,11 +554,24 @@ def test_image_analysis(reasoner):
     print("\n🧪 测试图片分析功能")
     print("=" * 50)
     
-    # 查找测试图片
-    test_image_path = Path(__file__).parent.parent.parent / "workspace" / "reference" / "math.png"
+    # 查找测试图片 - 支持多个可能的路径
+    possible_paths = [
+        Path(__file__).parent.parent.parent / "workspace" / "reference" / "math.png",
+        Path(__file__).parent.parent.parent.parent / "workspace" / "reference" / "math.png",
+        Path("/Users/suny0a/Proj/MM-Reasoning/CoTT/workspace/reference/math.png"),
+        Path("/home/t2vg-a100-G2-0/yasheng/CoTT/workspace/reference/math.png")
+    ]
     
-    if not test_image_path.exists():
-        print(f"❌ 测试图片不存在: {test_image_path}")
+    test_image_path = None
+    for path in possible_paths:
+        if path.exists():
+            test_image_path = path
+            break
+    
+    if not test_image_path:
+        print(f"❌ 测试图片不存在，尝试的路径:")
+        for path in possible_paths:
+            print(f"   - {path}")
         return
     
     print(f"📸 找到测试图片: {test_image_path}")
@@ -615,10 +629,43 @@ Figure 3: Process flowchart illustrating the workflow.
         print(f"   ✅ {fig['id']}: {fig['caption'][:50]}...")
 
 
+def show_setup_help():
+    """显示设置帮助信息"""
+    print("\n🔧 设置帮助")
+    print("=" * 50)
+    print("要使用此工具，需要设置以下环境变量:")
+    print()
+    print("1. 手动设置 Azure OpenAI API:")
+    print("   export AZURE_OPENAI_ENDPOINT='https://your-endpoint.cognitiveservices.azure.com/'")
+    print("   export AZURE_OPENAI_API_KEY='your-api-key-here'")
+    print("   export AZURE_OPENAI_DEPLOYMENT='gpt-4o'")
+    print()
+    print("2. 手动设置 Papyrus API:")
+    print("   export PAPYRUS_ENDPOINT='https://WestUS2Large.papyrus.binginternal.com/chat/completions'")
+    print("   export PAPYRUS_VERIFY_SCOPE='api://5fe538a8-15d5-4a84-961e-be66cd036687/.default'")
+    print("   export PAPYRUS_CLIENT_ID='d5702df1-96d9-4195-83a3-e44d8b0a0601'")
+    print()
+    print("3. 对于Papyrus API，需要安装:")
+    print("   pip install azure-identity")
+    print()
+    print("4. 如果Azure CLI token过期，重新登录:")
+    print("   az login")
+    print()
+
+
 def main():
     """主函数 - 演示混合API功能"""
     print("🤖 混合图表分析器 - 支持多API源")
     print("=" * 60)
+    
+    # 检查是否有API配置
+    has_azure_key = bool(os.getenv("AZURE_OPENAI_API_KEY"))
+    has_azure_identity = HAS_AZURE_IDENTITY
+    
+    if not has_azure_key and not has_azure_identity:
+        print("❌ 没有找到任何API配置")
+        show_setup_help()
+        return
     
     try:
         # 测试API切换
