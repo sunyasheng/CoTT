@@ -106,6 +106,9 @@ class SimpleParallelProcessor:
             paper_dir = markdown_file.parent.parent  # 回到论文根目录
             paper_name = markdown_file.stem
             
+            logger.info(f"📁 论文目录: {paper_dir}")
+            logger.info(f"📄 论文名称: {paper_name}")
+            
             result = test_smart_markdown_paper(paper_dir, paper_name, self.reasoner)
             
             if result and "training_data" in result:
