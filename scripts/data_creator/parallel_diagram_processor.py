@@ -176,7 +176,8 @@ class ParallelDiagramProcessor:
                         continue
                     
                     # 获取语义上下文
-                    context = self.reasoner.get_semantic_context_for_figure(figure, content)
+                    from hybrid_diagram_reasoner import get_semantic_context_for_figure
+                    context = get_semantic_context_for_figure(content, figure['caption'])
                     
                     # 分析图片
                     diagram_analysis = self.reasoner.analyze_diagram_with_gpt4o(
@@ -184,11 +185,12 @@ class ParallelDiagramProcessor:
                     )
                     
                     # 生成训练数据
-                    summary_result = self.reasoner.generate_diagram_description_with_o3(
+                    from hybrid_diagram_reasoner import generate_diagram_description_with_o3, generate_thinking_with_o3
+                    summary_result = generate_diagram_description_with_o3(
                         figure['caption'], context
                     )
                     
-                    thinking_result = self.reasoner.generate_thinking_with_o3(
+                    thinking_result = generate_thinking_with_o3(
                         figure['caption'], context, json.dumps(diagram_analysis, ensure_ascii=False)
                     )
                     
