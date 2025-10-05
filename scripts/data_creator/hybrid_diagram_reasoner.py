@@ -92,14 +92,12 @@ class HybridDiagramReasoner:
                                 key, value = line.split('=', 1)
                                 os.environ[key] = value
                     
-                    # 设置默认的 Azure OpenAI 配置
-                    if not os.getenv("AZURE_OPENAI_ENDPOINT"):
-                        os.environ["AZURE_OPENAI_ENDPOINT"] = "https://linjl-ma65uv6u-eastus2.cognitiveservices.azure.com/"
-                    if not os.getenv("AZURE_OPENAI_DEPLOYMENT"):
-                        os.environ["AZURE_OPENAI_DEPLOYMENT"] = "gpt-4o"
-                    if not os.getenv("AZURE_OPENAI_API_VERSION"):
-                        os.environ["AZURE_OPENAI_API_VERSION"] = "2024-02-15-preview"
-                    print(f"   ✅ 设置默认 Azure OpenAI 配置")
+                    # 验证关键环境变量是否加载成功
+                    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+                    if api_key:
+                        print(f"✅ Azure OpenAI API Key 已加载: {api_key[:20]}...")
+                    else:
+                        print("❌ Azure OpenAI API Key 未找到")
                     return True
         
         print("⚠️ 未找到环境变量文件")
