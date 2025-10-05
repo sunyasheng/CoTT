@@ -313,22 +313,23 @@ class HybridDiagramReasoner:
             except json.JSONDecodeError:
                 # 如果解析失败，尝试提取markdown代码块中的JSON
                 try:
-                    # 查找```json和```之间的内容
-                    json_match = re.search(r'```json\s*\n(.*?)\n```', content, re.DOTALL)
+                    # 查找```json和```之间的内容（更宽松的匹配）
+                    json_match = re.search(r'```json\s*\n?(.*?)\n?```', content, re.DOTALL)
                     if json_match:
-                        json_content = json_match.group(1)
+                        json_content = json_match.group(1).strip()
                         result = json.loads(json_content)
                     else:
                         # 尝试查找```和```之间的内容（没有json标记）
-                        code_match = re.search(r'```\s*\n(.*?)\n```', content, re.DOTALL)
+                        code_match = re.search(r'```\s*\n?(.*?)\n?```', content, re.DOTALL)
                         if code_match:
-                            json_content = code_match.group(1)
+                            json_content = code_match.group(1).strip()
                             result = json.loads(json_content)
                         else:
                             print(f"   ❌ 无法找到JSON内容: {content}")
                             return []
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
                     print(f"   ❌ 无法解析GPT分类结果: {content}")
+                    print(f"   🔍 JSON解析错误: {e}")
                     return []
             
             # 解析成功，提取结果
@@ -414,17 +415,17 @@ class HybridDiagramReasoner:
             except json.JSONDecodeError:
                 # 如果解析失败，尝试提取markdown代码块中的JSON
                 try:
-                    # 查找```json和```之间的内容
-                    json_match = re.search(r'```json\s*\n(.*?)\n```', content, re.DOTALL)
+                    # 查找```json和```之间的内容（更宽松的匹配）
+                    json_match = re.search(r'```json\s*\n?(.*?)\n?```', content, re.DOTALL)
                     if json_match:
-                        json_content = json_match.group(1)
+                        json_content = json_match.group(1).strip()
                         result = json.loads(json_content)
                         return result
                     else:
                         # 尝试查找```和```之间的内容（没有json标记）
-                        code_match = re.search(r'```\s*\n(.*?)\n```', content, re.DOTALL)
+                        code_match = re.search(r'```\s*\n?(.*?)\n?```', content, re.DOTALL)
                         if code_match:
-                            json_content = code_match.group(1)
+                            json_content = code_match.group(1).strip()
                             result = json.loads(json_content)
                             return result
                         else:
@@ -435,9 +436,10 @@ class HybridDiagramReasoner:
                             cleaned_content = re.sub(r'\n```.*?$', '', cleaned_content, flags=re.DOTALL)
                             result = json.loads(cleaned_content)
                             return result
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
                     # 如果还是解析失败，返回原始内容用于调试
                     print(f"   ⚠️ JSON解析失败，原始响应: {content[:200]}...")
+                    print(f"   🔍 JSON解析错误: {e}")
                     return {
                         "raw_response": content,
                         "error": "Failed to parse JSON response",
