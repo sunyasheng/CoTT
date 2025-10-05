@@ -505,6 +505,103 @@ def extract_json_from_markdown(content: str) -> Dict:
         return {}
 
 
+def generate_diagram_description_with_o3(caption: str, context: str) -> Dict:
+    """使用GPT-o3同时生成长短两个版本的diagram描述"""
+    
+    # Azure OpenAI 配置
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "https://linjl-ma65uv6u-eastus2.cognitiveservices.azure.com/")
+    api_key = os.getenv("AZURE_OPENAI_API_KEY", "")
+    deployment = "o3-DR"  # 直接使用o3-DR部署
+    api_version = "2025-01-01-preview"
+    
+    if not api_key:
+        return {"error": "Azure OpenAI API key not found"}
+    
+    # 构建请求URL
+    url = f"{endpoint}openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+    headers = {"Content-Type": "application/json", "api-key": api_key}
+    
+    # 使用prompt模板
+    prompt = prompt_manager.get_diagram_description_prompt(caption, context)
+
+    payload = {
+        "model": "GPT4oVision",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "max_completion_tokens": 4000,
+        "stream": False
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        response.raise_for_status()
+        
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        return {
+            "summary": content,
+            "success": True
+        }
+            
+    except Exception as e:
+        return {"error": f"API request failed: {str(e)}"}
+
+
+def generate_thinking_with_o3(caption: str, context: str, visual_analysis: str) -> Dict:
+    """使用GPT-o3生成thinking描述，综合视觉分析和paper context"""
+    
+    # Azure OpenAI 配置
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "https://linjl-ma65uv6u-eastus2.cognitiveservices.azure.com/")
+    api_key = os.getenv("AZURE_OPENAI_API_KEY", "")
+    deployment = "o3-DR"  # 使用o3-DR部署
+    api_version = "2025-01-01-preview"
+    
+    if not api_key:
+        return {"error": "Azure OpenAI API key not found"}
+    
+    # 构建URL和headers
+    url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": api_key
+    }
+    
+    # 使用prompt_manager获取prompt
+    prompt = prompt_manager.get_thinking_generation_prompt(caption, context, visual_analysis)
+    
+    payload = {
+        "model": "GPT4oVision",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "max_completion_tokens": 4000,
+        "stream": False
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        response.raise_for_status()
+        
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        return {
+            "summary": content,
+            "success": True
+        }
+            
+    except Exception as e:
+        return {"error": f"API request failed: {str(e)}"}
+
+
 
 
 def show_setup_help():
@@ -641,26 +738,208 @@ def test_smart_markdown_paper(paper_dir: Path, paper_name: str, reasoner: Hybrid
         
         print("   ✅ 图片分析完成")
         
-        # 构建训练数据
+        # 使用GPT-o3生成绘图指令
+        print("   🔍 使用GPT-o3生成绘图指令...")
+        summary_result = generate_diagram_description_with_o3(
+            figure['caption'], 
+            full_context
+        )
+        
+        if "error" in summary_result:
+            print(f"   ❌ 绘图指令生成失败: {summary_result['error']}")
+            # 即使GPT-o3失败，也保存GPT-4o的分析结果
+            summary_result = {"error": "GPT-o3 summary generation failed", "diagram_analysis_available": True}
+        
+        print("   ✅ 绘图指令生成完成")
+        
+        # 解析GPT-o3的JSON响应
+        parsed_summary = {}
+        if "summary" in summary_result:
+            try:
+                parsed_summary = json.loads(summary_result["summary"])
+                print(f"   ✅ JSON解析成功，包含字段: {list(parsed_summary.keys())}")
+            except json.JSONDecodeError as e:
+                print(f"   ⚠️ JSON解析失败: {e}")
+                # 尝试从markdown代码块中提取
+                parsed_summary = extract_json_from_markdown(summary_result["summary"])
+                print(f"   📋 提取结果: {parsed_summary}")
+        
+        # 构建双阶段训练数据
+        # 第一阶段输出 = 第二阶段输入 (diagram description)
+        analysis = diagram_analysis.get("diagram_analysis", {})
+        nodes = analysis.get("nodes", [])
+        relationships = analysis.get("relationships", [])
+        
+        # 从nodes中提取main_components（使用新的nodes结构）
+        main_components = []
+        for node in nodes:
+            if isinstance(node, dict):
+                # 优先使用content，如果没有则使用id
+                content = node.get("content", node.get("id", ""))
+                if content:
+                    main_components.append(content)
+            else:
+                # 向后兼容：如果是字符串，直接添加
+                main_components.append(str(node))
+        
+        diagram_description = {
+            "diagram_description": parsed_summary.get("diagram_description_long", ""),
+            "diagram_description_long": parsed_summary.get("diagram_description_long", ""),
+            "diagram_description_short": parsed_summary.get("diagram_description_short", ""),
+            "diagram_type": analysis.get("diagram_type", ""),
+            "main_components": main_components,
+            "relationships": relationships
+        }
+        
+        # 检查数据质量
+        data_quality = "valid"
+        quality_issues = []
+        
+        # 检查stage1数据质量
+        if not diagram_description.get("diagram_description", "").strip():
+            data_quality = "invalid"
+            quality_issues.append("empty_diagram_description")
+        
+        # 检查stage2数据质量
+        if "error" in summary_result:
+            data_quality = "invalid"
+            quality_issues.append("stage2_generation_failed")
+        
+        # 从GPT-o3结果中获取长短两个版本的描述
+        diagram_desc_long = diagram_description.get("diagram_description_long", diagram_description.get("diagram_description", ""))
+        diagram_desc_short = diagram_description.get("diagram_description_short", "")
+        
         training_data = {
-            "data_quality": "valid",
-            "quality_issues": [],
+            # 数据质量标签
+            "data_quality": data_quality,
+            "quality_issues": quality_issues,
+            
+            # 第一阶段训练数据: context + caption -> diagram description (GPT-o3)
             "stage1_input": {
                 "context": full_context,
                 "caption": figure['caption']
             },
+            
+            # 第二阶段训练数据: diagram description -> thinking + image (GPT-4o)
             "stage2_input": {
-                "diagram_description": diagram_analysis.get("diagram_analysis", {}).get("diagram_type", ""),
-                "main_components": diagram_analysis.get("diagram_analysis", {}).get("nodes", [])
+                "diagram_description_long": diagram_desc_long,  # 长版本描述
+                "diagram_description_short": diagram_desc_short  # 短版本描述（通过GPT生成）
             },
             "stage2_output": {
-                "thinking": "",
-                "image_path": str(image_path)
+                "thinking_long": "",
+                "thinking_short": "",
+                "image_path": str(image_path)  # 第二阶段输出包含图片路径
             }
         }
         
+        # 使用GPT-o3生成thinking，综合视觉分析和paper context
+        print(f"   🔍 使用GPT-o3生成thinking...")
+        thinking_result = generate_thinking_with_o3(
+            figure['caption'], 
+            full_context, 
+            json.dumps(diagram_analysis, ensure_ascii=False)
+        )
+        
+        judge_data_entry = None
+        if "summary" in thinking_result:
+            thinking_content = thinking_result["summary"]
+            
+            # 解析GPT-o3的JSON响应
+            try:
+                thinking_json = json.loads(thinking_content)
+                thinking_long = thinking_json.get("thinking_long", "")
+                thinking_short = thinking_json.get("thinking_short", "")
+                print(f"   ✅ Thinking生成成功")
+            except json.JSONDecodeError as e:
+                print(f"   ⚠️ Thinking JSON解析失败: {e}")
+                # 尝试从markdown代码块中提取
+                thinking_json = extract_json_from_markdown(thinking_content)
+                thinking_long = thinking_json.get("thinking_long", "")
+                thinking_short = thinking_json.get("thinking_short", "")
+            
+            # 检查thinking是否为空或包含省略号
+            if not thinking_long.strip() or "..." in thinking_long:
+                data_quality = "invalid"
+                quality_issues.append("empty_or_incomplete_thinking_long")
+            
+            if not thinking_short.strip() or "..." in thinking_short:
+                data_quality = "invalid"
+                quality_issues.append("empty_or_incomplete_thinking_short")
+            
+            training_data["stage2_output"]["thinking_long"] = thinking_long
+            training_data["stage2_output"]["thinking_short"] = thinking_short
+            
+            # 更新数据质量标签
+            training_data["data_quality"] = data_quality
+            training_data["quality_issues"] = quality_issues
+            
+            # 为judge_data准备评分标准(rubric)数据
+            analysis = diagram_analysis.get("diagram_analysis", {})
+            nodes = analysis.get("nodes", [])
+            groups = analysis.get("groups", [])
+            relationships = analysis.get("relationships", [])
+            visual_elements = analysis.get("visual_elements", {})
+            standalone_nodes = analysis.get("standalone_nodes", [])
+            
+            # 提取所有节点（使用新的nodes结构）
+            all_nodes = []
+            
+            # 从nodes数组中提取节点信息
+            for node in nodes:
+                if isinstance(node, dict):
+                    # 使用新的nodes结构：包含id, type, content, attributes
+                    node_info = {
+                        "id": node.get("id", ""),
+                        "type": node.get("type", ""),
+                        "content": node.get("content", ""),
+                        "attributes": node.get("attributes", {})
+                    }
+                    all_nodes.append(node_info)
+                else:
+                    # 向后兼容：如果是字符串，直接添加
+                    all_nodes.append(node)
+            
+            # 添加独立节点（如果有的话）
+            for standalone_node in standalone_nodes:
+                if isinstance(standalone_node, str):
+                    all_nodes.append(standalone_node)
+                else:
+                    all_nodes.append(standalone_node)
+            
+            # 从groups中提取节点引用（保持引用关系）
+            group_node_refs = []
+            for group in groups:
+                group_node_refs.extend(group.get("nodes", []))
+            
+            judge_data_entry = {
+                "image_info": {
+                    "image_path": str(image_path),
+                    "figure_id": figure['id'],
+                    "figure_src": figure['src'],
+                    "figure_caption": figure['caption']
+                },
+                "evaluation_rubric": {
+                    "semantic_criteria": {
+                        "critical_entities": all_nodes,
+                        "critical_relationships": relationships,
+                        "hierarchical_groups": groups,  # 直接使用新的groups结构
+                        "data_flow": "Sequential processing flow",
+                        "dependencies": []
+                    },
+                    "visual_criteria": {
+                        "layout_requirements": visual_elements.get("layout", ""),
+                        "color_scheme": visual_elements.get("colors", []),
+                        "shape_requirements": visual_elements.get("shapes", [])
+                    }
+                },
+                "reference_descriptions": {
+                    "detailed_thinking": thinking_long,
+                    "concise_thinking": thinking_short
+                }
+            }
+        
         # 构建judge数据
-        judge_data = {
+        judge_data = judge_data_entry if judge_data_entry else {
             "image_info": {
                 "image_path": str(image_path),
                 "figure_id": figure['id'],
