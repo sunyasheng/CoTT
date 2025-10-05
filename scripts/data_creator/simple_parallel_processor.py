@@ -130,6 +130,10 @@ class SimpleParallelProcessor:
                     "processed_results": len(result.get("results", []))
                 }
                 file_result["status"] = "completed"
+                
+                # 保存单个文件的结果
+                self.save_file_results(all_training_data, all_judge_data, file_output_dir, markdown_file.stem)
+                
                 logger.info(f"✅ 完成处理: {markdown_file.name}")
             else:
                 file_result["status"] = "failed"
@@ -145,6 +149,21 @@ class SimpleParallelProcessor:
         file_result["processing_time"] = time.time() - start_time
         
         return file_result
+    
+    def save_file_results(self, training_data: List[Dict], judge_data: List[Dict], 
+                         output_dir: Path, file_name: str):
+        """保存单个文件的结果"""
+        # 保存训练数据
+        training_file = output_dir / f"{file_name}_training_data.json"
+        with open(training_file, 'w', encoding='utf-8') as f:
+            json.dump(training_data, f, ensure_ascii=False, indent=2)
+        
+        # 保存judge数据
+        judge_file = output_dir / f"{file_name}_judge_data.json"
+        with open(judge_file, 'w', encoding='utf-8') as f:
+            json.dump(judge_data, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"💾 保存结果到: {output_dir}")
     
     def process_parallel(self, input_dir: str, output_dir: str) -> Dict[str, Any]:
         """并行处理所有markdown文件"""
