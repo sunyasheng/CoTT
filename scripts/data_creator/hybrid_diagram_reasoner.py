@@ -65,6 +65,7 @@ class HybridDiagramReasoner:
             Path(__file__).parent.parent.parent / "CoTT" / ".env",
             Path(__file__).parent.parent.parent / "CoTT" / ".env_old",
             Path("/Users/suny0a/Proj/MM-Reasoning/CoTT/.env"),  # 绝对路径
+            Path("/home/t2vg-a100-G2-0/yasheng/CoTT/.env"),  # 服务器路径
         ]
         
         if HAS_DOTENV:
@@ -72,6 +73,12 @@ class HybridDiagramReasoner:
                 if env_path.exists():
                     print(f"📄 加载环境变量: {env_path}")
                     load_dotenv(env_path)
+                    # 验证关键环境变量是否加载成功
+                    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+                    if api_key:
+                        print(f"✅ Azure OpenAI API Key 已加载: {api_key[:20]}...")
+                    else:
+                        print("❌ Azure OpenAI API Key 未找到")
                     return True
         else:
             # 简单的环境变量加载
