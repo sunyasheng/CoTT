@@ -145,15 +145,15 @@ class HybridDiagramReasoner:
     
     def setup_papyrus_auth(self):
         """设置Papyrus认证"""
+        # 优先尝试ManagedIdentityCredential（与papyrus_on_vm_2.py保持一致）
         try:
-            # 尝试使用AzureCliCredential
-            print("🔐 尝试使用 Azure CLI 认证...")
-            cred = AzureCliCredential()
+            print("🔐 尝试使用 Managed Identity 认证...")
+            cred = ManagedIdentityCredential(client_id=self.client_id)
             self.access_token = cred.get_token(self.verify_scope).token
-            print("✅ Azure CLI 认证成功")
+            print("✅ Managed Identity 认证成功")
             return True
         except Exception as e:
-            print(f"❌ Azure CLI 认证失败: {e}")
+            print(f"❌ Managed Identity 认证失败: {e}")
         
         try:
             # 尝试使用DefaultAzureCredential
@@ -166,14 +166,14 @@ class HybridDiagramReasoner:
             print(f"❌ Default Azure 认证失败: {e}")
         
         try:
-            # 尝试使用ManagedIdentityCredential（仅在Azure环境中有效）
-            print("🔐 尝试使用 Managed Identity 认证...")
-            cred = ManagedIdentityCredential(client_id=self.client_id)
+            # 最后尝试使用AzureCliCredential
+            print("🔐 尝试使用 Azure CLI 认证...")
+            cred = AzureCliCredential()
             self.access_token = cred.get_token(self.verify_scope).token
-            print("✅ Managed Identity 认证成功")
+            print("✅ Azure CLI 认证成功")
             return True
         except Exception as e:
-            print(f"❌ Managed Identity 认证失败: {e}")
+            print(f"❌ Azure CLI 认证失败: {e}")
         
         return False
     
