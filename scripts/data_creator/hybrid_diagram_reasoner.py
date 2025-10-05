@@ -19,7 +19,6 @@ import re
 import json
 import requests
 import base64
-import openai
 from pathlib import Path
 from typing import Dict, List, Optional
 from enum import Enum
