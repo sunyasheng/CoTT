@@ -564,6 +564,8 @@ def test_image_analysis(reasoner):
         Path(__file__).parent.parent.parent / "workspace" / "reference" / "math.png",
         Path(__file__).parent.parent.parent.parent / "workspace" / "reference" / "math.png",
         Path("/Users/suny0a/Proj/MM-Reasoning/CoTT/workspace/reference/math.png"),
+        Path("/home/t2vg-a100-G2-0/yasheng/CoTT/workspace/reference/math.png"),
+        Path("/home/t2vg-a100-G2-0/yasheng/math.png"),  # 服务器上的实际路径
         Path("/home/t2vg-a100-G2-0/yasheng/CoTT/workspace/reference/math.png")
     ]
     
