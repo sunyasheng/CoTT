@@ -162,7 +162,13 @@ class ParallelDiagramProcessor:
             for i, figure in enumerate(diagram_figures):
                 try:
                     # 构建图片路径
-                    image_path = markdown_file.parent / "vlm" / "images" / figure['filename']
+                    # 从src中提取文件名
+                    src_path = figure['src']
+                    if '/' in src_path:
+                        filename = src_path.split('/')[-1]
+                    else:
+                        filename = src_path
+                    image_path = markdown_file.parent / "vlm" / "images" / filename
                     
                     if not image_path.exists():
                         logger.warning(f"⚠️ 图片文件不存在: {image_path}")
@@ -221,7 +227,7 @@ class ParallelDiagramProcessor:
                     judge_data.append(judge_item)
                     
                 except Exception as e:
-                    logger.error(f"❌ 处理图片时出错 {figure.get('filename', 'unknown')}: {e}")
+                    logger.error(f"❌ 处理图片时出错 {figure.get('src', 'unknown')}: {e}")
                     continue
             
             # 保存单个文件的结果
