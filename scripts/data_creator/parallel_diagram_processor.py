@@ -138,7 +138,7 @@ class ParallelDiagramProcessor:
                 content = f.read()
             
             # 提取图片信息
-            figures = self.reasoner.extract_figures_from_markdown(content)
+            figures = self.reasoner.extract_all_figures_from_markdown(content)
             
             if not figures:
                 logger.warning(f"⚠️ 文件中没有找到图片: {markdown_file.name}")
