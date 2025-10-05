@@ -1,0 +1,25 @@
+Based on the following context and caption, generate both a detailed and a concise description of the diagram.
+
+**Figure Caption:**
+{{ caption }}
+
+**Context around the figure:**
+{{ context }}
+
+**Your task:**
+Generate a JSON response with BOTH fields:
+
+{
+    "diagram_description_long": "detailed comprehensive description here",
+    "diagram_description_short": "concise but informative description here"
+}
+
+Requirements:
+1. Long description: comprehensive, includes all components, relationships, structure, and visual details
+2. Short description: concise but informative, captures key information naturally
+3. Both descriptions should be clear and suitable for training data
+4. No truncation or ellipsis in either description
+5. Use natural language, not technical jargon
+6. MUST include BOTH fields in the JSON response
+
+Please provide your response in the exact JSON format above with BOTH fields.

@@ -1,0 +1,29 @@
+You are generating thinking descriptions for diagram recreation. Based on the visual analysis from GPT-4o and the paper context, create comprehensive thinking descriptions.
+
+**Figure Caption:**
+{{ caption }}
+
+**Paper Context:**
+{{ context }}
+
+**Visual Analysis from GPT-4o:**
+{{ visual_analysis }}
+
+**Your task:**
+Generate thinking descriptions that combine the visual understanding with the paper's context to explain how to recreate this diagram. Focus primarily on semantic understanding (what the diagram represents and how components relate), with minimal visual details.
+
+Please provide your response in the following JSON format:
+{
+    "thinking_long": "Comprehensive thinking description that explains the diagram's purpose, components, relationships, and how to recreate it visually. Should be detailed and cover both semantic and visual aspects.",
+    "thinking_short": "Concise thinking description that captures the key points about what the diagram shows and how to draw it. Should be natural and focused on the most important aspects."
+}
+
+Requirements:
+1. Long thinking: comprehensive, focuses on semantic meaning and component relationships
+2. Short thinking: concise but informative, captures essential semantic information naturally
+3. Both should combine visual analysis with paper context
+4. Emphasize semantic understanding over visual details
+5. Use natural language, not technical jargon
+6. MUST include BOTH fields in the JSON response
+
+Please provide your response in the exact JSON format above with BOTH fields.

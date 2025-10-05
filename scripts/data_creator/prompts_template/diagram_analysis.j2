@@ -1,0 +1,75 @@
+You are analyzing a diagram from a research paper. Your goal is to extract a **semantic, hierarchical, and relationship-aware representation** of the diagram, focusing on its logic and structure rather than just visual style.
+
+**Figure Caption:**
+{{ caption }}
+
+**Context around the figure:**
+{{ context }}
+
+**Instructions:**
+1. Identify all **nodes** (basic elements, operations, entities, or concepts).
+   - For each node, include:
+     - `id`: meaningful identifier based on content (e.g., "input_video", "3d_convnet", "feature_maps", "tpn", "zsdn")
+     - `type`: semantic type (e.g., process, data, module, concept)
+     - `content`: label or name
+     - `attributes`: optional semantic properties (e.g., input/output types, conditions)
+2. Identify **groups and subgroups** to capture hierarchical or modular organization.
+   - For each group:
+     - `id`, `name`, `level`
+     - contained `nodes`
+     - nested `subgroups` (if any)
+3. Identify **relationships** between nodes or groups, capturing semantic logic.
+   - For each relationship:
+     - `from`, `to`
+     - `type`: semantic relationship (e.g., data_flow, control_flow, dependency, hierarchy, association)
+     - `label` or description
+     - optional attributes like conditions or weights
+4. Include **standalone nodes** not in any group.
+5. Optionally, describe **visual elements** (layout, shapes, colors, labels) if useful for rendering, but they are secondary.
+
+**Output Format (JSON):**
+{
+  "diagram_analysis": {
+    "nodes": [
+      {
+        "id": "input_video",
+        "type": "data",
+        "content": "Input Video",
+        "attributes": {"dimensions": "R^(3 x L x H x W)", "description": "RGB frames"}
+      },
+      {
+        "id": "3d_convnet",
+        "type": "process", 
+        "content": "3D ConvNet",
+        "attributes": {"input": "input_video", "output": "feature_maps"}
+      }
+    ],
+    "groups": [
+      {
+        "id": "input_processing",
+        "name": "Input Processing Stage",
+        "level": 1,
+        "nodes": ["input_video", "3d_convnet"],
+        "subgroups": []
+      }
+    ],
+    "relationships": [
+      {
+        "from": "input_video",
+        "to": "3d_convnet",
+        "type": "data_flow",
+        "label": "video_to_features",
+        "attributes": {}
+      }
+    ],
+    "standalone_nodes": ["nodeX"],
+    "visual_elements": {
+      "layout": "top-down / left-right / circular etc.",
+      "colors": ["main colors"],
+      "shapes": ["rectangles, circles, arrows"],
+      "labels": ["important text"]
+    }
+  }
+}
+
+Make sure your analysis captures **semantic logic, hierarchy, and dependencies**, so the diagram can be faithfully reconstructed from this representation.
