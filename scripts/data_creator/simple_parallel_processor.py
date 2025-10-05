@@ -111,15 +111,29 @@ class SimpleParallelProcessor:
             
             result = test_smart_markdown_paper(paper_dir, paper_name, self.reasoner)
             
-            if result and "training_data" in result:
-                file_result["training_data"] = result["training_data"]
-                file_result["judge_data"] = result.get("judge_data", [])
-                file_result["statistics"] = result.get("statistics", {})
+            if result and "results" in result and result["results"]:
+                # 合并所有results中的training_data和judge_data
+                all_training_data = []
+                all_judge_data = []
+                
+                for res in result["results"]:
+                    if "training_data" in res:
+                        all_training_data.append(res["training_data"])
+                    if "judge_data" in res:
+                        all_judge_data.append(res["judge_data"])
+                
+                file_result["training_data"] = all_training_data
+                file_result["judge_data"] = all_judge_data
+                file_result["statistics"] = {
+                    "total_figures": result.get("total_figures", 0),
+                    "diagram_figures": result.get("diagram_figures", 0),
+                    "processed_results": len(result.get("results", []))
+                }
                 file_result["status"] = "completed"
                 logger.info(f"✅ 完成处理: {markdown_file.name}")
             else:
                 file_result["status"] = "failed"
-                file_result["error"] = "处理返回空结果"
+                file_result["error"] = "处理返回空结果或没有results"
                 logger.error(f"❌ 处理失败: {markdown_file.name}")
                 
         except Exception as e:
