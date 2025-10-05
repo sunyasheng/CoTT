@@ -168,7 +168,8 @@ class ParallelDiagramProcessor:
                         filename = src_path.split('/')[-1]
                     else:
                         filename = src_path
-                    image_path = markdown_file.parent / "vlm" / "images" / filename
+                    # markdown_file.parent 已经是 vlm 目录，所以直接加 images
+                    image_path = markdown_file.parent / "images" / filename
                     
                     if not image_path.exists():
                         logger.warning(f"⚠️ 图片文件不存在: {image_path}")
