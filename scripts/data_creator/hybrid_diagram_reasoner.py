@@ -1122,16 +1122,23 @@ class FAISSRetriever:
             model = SentenceTransformer('all-mpnet-base-v2', device=device)
             print(f"   ✅ SentenceTransformer 模型加载成功")
             
-            # 创建自定义的embeddings类来适配langchain
-            class SentenceTransformerEmbeddings:
-                def __init__(self, model):
-                    self.model = model
+                # 创建自定义的embeddings类来适配langchain
+                try:
+                    from langchain.embeddings.base import Embeddings
+                except ImportError:
+                    from langchain_core.embeddings import Embeddings
                 
-                def embed_documents(self, texts):
-                    return self.model.encode(texts).tolist()
-                
-                def embed_query(self, text):
-                    return self.model.encode([text])[0].tolist()
+                class SentenceTransformerEmbeddings(Embeddings):
+                    def __init__(self, model):
+                        self.model = model
+                    
+                    def embed_documents(self, texts):
+                        """嵌入文档列表"""
+                        return self.model.encode(texts).tolist()
+                    
+                    def embed_query(self, text):
+                        """嵌入单个查询"""
+                        return self.model.encode([text])[0].tolist()
             
             # 创建embeddings实例并缓存到类级别
             FAISSRetriever._shared_model = model
