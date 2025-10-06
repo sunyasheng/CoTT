@@ -16,6 +16,7 @@ import re
 import json
 import requests
 import base64
+import time
 from pathlib import Path
 from typing import Dict, List
 
@@ -74,6 +75,91 @@ def load_env_vars():
 
 # 加载环境变量
 load_env_vars()
+
+# 全局变量用于控制API请求间隔
+last_api_call_time = 0
+api_call_interval = 1.0  # 1秒间隔，避免rate limit
+
+def make_api_request_with_retry(url: str, headers: Dict, payload: Dict, max_retries: int = 3, delay: float = 2.0, timeout: int = 180) -> Dict:
+    """带重试机制的API请求 - 与hybrid版本保持一致"""
+    global last_api_call_time, api_call_interval
+    
+    for attempt in range(max_retries):
+        try:
+            # 添加请求间隔，避免rate limit
+            current_time = time.time()
+            time_since_last_call = current_time - last_api_call_time
+            if time_since_last_call < api_call_interval:
+                sleep_time = api_call_interval - time_since_last_call
+                print(f"   ⏳ 等待 {sleep_time:.1f} 秒避免rate limit...")
+                time.sleep(sleep_time)
+            
+            response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            last_api_call_time = time.time()  # 更新最后调用时间
+            
+            if response.status_code == 401:
+                print(f"   ⚠️ 401错误 (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    print(f"   ⏳ 等待 {delay} 秒后重试...")
+                    time.sleep(delay)
+                    delay *= 1.5  # 指数退避
+                    continue
+                else:
+                    response.raise_for_status()
+            elif response.status_code == 429:
+                print(f"   ⚠️ 429 Rate Limit (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    wait_time = delay * (2 ** attempt)  # 指数退避
+                    print(f"   ⏳ 等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    response.raise_for_status()
+            elif response.status_code == 408:
+                print(f"   ⚠️ 408 Request Timeout (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    wait_time = delay * (1.5 ** attempt)  # 适中的退避
+                    print(f"   ⏳ 等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    response.raise_for_status()
+            else:
+                response.raise_for_status()
+            
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            print(f"   ❌ API请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print(f"   ⏳ 等待 {delay} 秒后重试...")
+                time.sleep(delay)
+                delay *= 1.5
+            else:
+                raise e
+    
+    return {"error": f"API request failed after {max_retries} attempts"}
+
+def extract_json_from_markdown(content: str) -> Dict:
+    """从markdown内容中提取JSON"""
+    try:
+        # 查找```json和```之间的内容
+        json_match = re.search(r'```json\s*\n(.*?)\n```', content, re.DOTALL)
+        if json_match:
+            json_content = json_match.group(1)
+            return json.loads(json_content)
+        
+        # 尝试查找```和```之间的内容（没有json标记）
+        code_match = re.search(r'```\s*\n(.*?)\n```', content, re.DOTALL)
+        if code_match:
+            json_content = code_match.group(1)
+            return json.loads(json_content)
+        
+        # 如果都没有找到，尝试直接解析
+        return json.loads(content)
+        
+    except json.JSONDecodeError:
+        return {}
 
 def extract_all_figures_from_markdown(markdown_content: str) -> List[Dict]:
     """提取所有图片信息，不做任何过滤"""
@@ -181,10 +267,7 @@ def classify_figures_with_gpt(figures: List[Dict], paper_title: str = "") -> Lis
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        
-        data = response.json()
+        data = make_api_request_with_retry(url, headers, payload, max_retries=3, delay=2.0, timeout=60)
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
         
         # 尝试解析JSON
@@ -454,10 +537,7 @@ def analyze_diagram_with_gpt4o(image_path: str, caption: str, context: str) -> D
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=180)
-        response.raise_for_status()
-        
-        data = response.json()
+        data = make_api_request_with_retry(url, headers, payload, max_retries=3, delay=3.0, timeout=180)
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
         
         # 尝试解析JSON
@@ -591,10 +671,7 @@ def generate_thinking_with_o3(caption: str, context: str, visual_analysis: str) 
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        
-        data = response.json()
+        data = make_api_request_with_retry(url, headers, payload, max_retries=3, delay=2.0, timeout=120)
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         
         return {
@@ -636,10 +713,7 @@ def generate_diagram_description_with_o3(caption: str, context: str) -> Dict:
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        
-        data = response.json()
+        data = make_api_request_with_retry(url, headers, payload, max_retries=3, delay=2.0, timeout=120)
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         
         return {
