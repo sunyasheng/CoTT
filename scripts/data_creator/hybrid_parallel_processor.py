@@ -9,7 +9,7 @@
 4. 合并所有结果
 
 使用方法：
-python simple_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4
+python hybrid_simple_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4
 """
 
 import os
