@@ -37,7 +37,8 @@ def load_env_vars():
         Path(__file__).parent.parent / ".env",
         Path(__file__).parent.parent.parent / "CoTT" / ".env",
         Path(__file__).parent.parent.parent / "CoTT" / ".env_old",
-        Path("/Users/suny0a/Proj/MM-Reasoning/CoTT/.env"),  # 绝对路径
+        Path("/home/suny0a/Proj/CoTT/.env"),  # Linux 绝对路径
+        Path("/Users/suny0a/Proj/MM-Reasoning/CoTT/.env"),  # macOS 绝对路径
     ]
     
     if HAS_DOTENV:
