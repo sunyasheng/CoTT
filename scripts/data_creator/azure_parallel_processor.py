@@ -47,8 +47,9 @@ logger = logging.getLogger(__name__)
 class AzureSimpleParallelProcessor:
     """Azure简单并行处理器 - 直接复用azure_diagram_reasoner逻辑"""
     
-    def __init__(self, max_workers: int = 4):
+    def __init__(self, max_workers: int = 4, skip_existing: bool = True):
         self.max_workers = max_workers
+        self.skip_existing = skip_existing
         
     def find_markdown_files(self, input_dir: str) -> List[Path]:
         """扫描目录下的所有markdown文件"""
@@ -68,6 +69,59 @@ class AzureSimpleParallelProcessor:
         logger.info(f"📁 在 {input_dir} 中找到 {len(markdown_files)} 个markdown文件")
         return markdown_files
     
+    def check_existing_data(self, output_dir: Path, file_name: str) -> bool:
+        """检查是否已存在训练数据文件"""
+        file_output_dir = output_dir / file_name
+        training_file = file_output_dir / f"{file_name}_training_data.json"
+        judge_file = file_output_dir / f"{file_name}_judge_data.json"
+        
+        # 检查两个文件是否都存在且不为空
+        if training_file.exists() and judge_file.exists():
+            try:
+                # 检查文件内容是否有效
+                with open(training_file, 'r', encoding='utf-8') as f:
+                    training_data = json.load(f)
+                with open(judge_file, 'r', encoding='utf-8') as f:
+                    judge_data = json.load(f)
+                
+                # 检查数据是否为空
+                if training_data and judge_data:
+                    logger.info(f"✅ 发现已存在的训练数据: {file_name}")
+                    return True
+                else:
+                    logger.info(f"⚠️ 训练数据文件存在但为空: {file_name}")
+                    return False
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"⚠️ 训练数据文件损坏: {file_name}, 错误: {e}")
+                return False
+        
+        return False
+
+    def load_existing_data(self, output_dir: Path, file_name: str) -> Dict[str, Any]:
+        """加载已存在的训练数据"""
+        file_output_dir = output_dir / file_name
+        training_file = file_output_dir / f"{file_name}_training_data.json"
+        judge_file = file_output_dir / f"{file_name}_judge_data.json"
+        
+        try:
+            with open(training_file, 'r', encoding='utf-8') as f:
+                training_data = json.load(f)
+            with open(judge_file, 'r', encoding='utf-8') as f:
+                judge_data = json.load(f)
+            
+            return {
+                "training_data": training_data,
+                "judge_data": judge_data,
+                "statistics": {
+                    "total_figures": len(training_data),  # 估算
+                    "diagram_figures": len(training_data),
+                    "processed_results": len(training_data)
+                }
+            }
+        except Exception as e:
+            logger.error(f"❌ 加载已存在数据失败: {file_name}, 错误: {e}")
+            return None
+
     def process_single_file(self, markdown_file: Path, output_dir: Path) -> Dict[str, Any]:
         """处理单个markdown文件 - 直接调用azure_diagram_reasoner函数"""
         start_time = time.time()
@@ -88,6 +142,19 @@ class AzureSimpleParallelProcessor:
             # 创建每个文件的输出目录
             file_output_dir = output_dir / markdown_file.stem
             file_output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 检查是否跳过已存在的数据
+            if self.skip_existing and self.check_existing_data(output_dir, markdown_file.stem):
+                logger.info(f"⏭️ 跳过已存在的文件: {markdown_file.name}")
+                existing_data = self.load_existing_data(output_dir, markdown_file.stem)
+                if existing_data:
+                    file_result.update(existing_data)
+                    file_result["status"] = "skipped"
+                    file_result["end_time"] = datetime.now().isoformat()
+                    file_result["processing_time"] = time.time() - start_time
+                    return file_result
+                else:
+                    logger.warning(f"⚠️ 无法加载已存在数据，继续处理: {markdown_file.name}")
             
             # 直接调用azure_diagram_reasoner中的test_smart_markdown_paper函数
             # 这个函数已经包含了完整的处理逻辑
@@ -171,6 +238,7 @@ class AzureSimpleParallelProcessor:
         # 并行处理
         results = []
         failed_files = []
+        skipped_files = []
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # 提交所有任务
@@ -189,6 +257,9 @@ class AzureSimpleParallelProcessor:
                     if result["status"] == "failed":
                         failed_files.append(result)
                         logger.error(f"❌ 文件处理失败: {file.name}")
+                    elif result["status"] == "skipped":
+                        skipped_files.append(result)
+                        logger.info(f"⏭️ 文件已跳过: {file.name}")
                     else:
                         logger.info(f"✅ 文件处理完成: {file.name}")
                         
@@ -206,7 +277,7 @@ class AzureSimpleParallelProcessor:
         all_judge_data = []
         
         for result in results:
-            if result["status"] == "completed":
+            if result["status"] in ["completed", "skipped"]:
                 all_training_data.extend(result.get("training_data", []))
                 all_judge_data.extend(result.get("judge_data", []))
         
@@ -215,14 +286,17 @@ class AzureSimpleParallelProcessor:
         
         # 生成统计信息
         total_time = time.time() - start_time
+        successful_files = len([r for r in results if r["status"] == "completed"])
         statistics = {
             "total_files": len(markdown_files),
-            "successful_files": len(results) - len(failed_files),
+            "successful_files": successful_files,
+            "skipped_files": len(skipped_files),
             "failed_files": len(failed_files),
             "total_training_items": len(all_training_data),
             "total_judge_items": len(all_judge_data),
             "total_processing_time": total_time,
-            "average_time_per_file": total_time / len(markdown_files) if markdown_files else 0
+            "average_time_per_file": total_time / len(markdown_files) if markdown_files else 0,
+            "skip_existing_enabled": self.skip_existing
         }
         
         logger.info(f"🎉 并行处理完成！")
@@ -232,6 +306,7 @@ class AzureSimpleParallelProcessor:
             "statistics": statistics,
             "results": results,
             "failed_files": failed_files,
+            "skipped_files": skipped_files,
             "all_training_data": all_training_data,
             "all_judge_data": all_judge_data
         }
@@ -263,11 +338,13 @@ def main():
     parser.add_argument("--input_dir", "-i", required=True, help="输入markdown文件目录")
     parser.add_argument("--output_dir", "-o", required=True, help="输出目录")
     parser.add_argument("--workers", "-w", type=int, default=4, help="并行工作线程数")
+    parser.add_argument("--no-skip-existing", action="store_true", 
+                       help="禁用跳过已存在训练数据的功能，强制重新处理所有文件")
     
     args = parser.parse_args()
     
     # 创建处理器
-    processor = AzureSimpleParallelProcessor(max_workers=args.workers)
+    processor = AzureSimpleParallelProcessor(max_workers=args.workers, skip_existing=not args.no_skip_existing)
     
     # 开始处理
     result = processor.process_parallel(args.input_dir, args.output_dir)
