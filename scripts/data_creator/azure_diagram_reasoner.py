@@ -569,13 +569,7 @@ def generate_thinking_with_o3(caption: str, context: str, visual_analysis: str) 
     
     if not api_key:
         return {"error": "Azure OpenAI API key not found"}
-    
-    # 配置Azure OpenAI
-    openai.api_type = "azure"
-    openai.api_base = endpoint
-    openai.api_version = api_version
-    openai.api_key = api_key
-    
+        
     # 构建URL和headers
     url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
     headers = {
