@@ -143,18 +143,7 @@ class AzureSimpleParallelProcessor:
             file_output_dir = output_dir / markdown_file.stem
             file_output_dir.mkdir(parents=True, exist_ok=True)
             
-            # 检查是否跳过已存在的数据
-            if self.skip_existing and self.check_existing_data(output_dir, markdown_file.stem):
-                logger.info(f"⏭️ 跳过已存在的文件: {markdown_file.name}")
-                existing_data = self.load_existing_data(output_dir, markdown_file.stem)
-                if existing_data:
-                    file_result.update(existing_data)
-                    file_result["status"] = "skipped"
-                    file_result["end_time"] = datetime.now().isoformat()
-                    file_result["processing_time"] = time.time() - start_time
-                    return file_result
-                else:
-                    logger.warning(f"⚠️ 无法加载已存在数据，继续处理: {markdown_file.name}")
+            # 注意：跳过的文件已经在主流程中处理，这里只处理需要重新生成的文件
             
             # 直接调用azure_diagram_reasoner中的test_smart_markdown_paper函数
             # 这个函数已经包含了完整的处理逻辑
@@ -220,6 +209,35 @@ class AzureSimpleParallelProcessor:
         
         logger.info(f"💾 保存结果到: {output_dir}")
     
+    def scan_existing_files(self, markdown_files: List[Path], output_dir: Path) -> tuple:
+        """扫描已存在的文件，返回需要处理和跳过的文件列表"""
+        if not self.skip_existing:
+            return markdown_files, []
+        
+        files_to_process = []
+        files_to_skip = []
+        
+        logger.info(f"🔍 扫描已存在的训练数据文件...")
+        
+        for file in markdown_files:
+            if self.check_existing_data(output_dir, file.stem):
+                files_to_skip.append(file)
+            else:
+                files_to_process.append(file)
+        
+        logger.info(f"📊 扫描结果:")
+        logger.info(f"   ⏭️ 将跳过 {len(files_to_skip)} 个已存在数据的文件")
+        logger.info(f"   🔄 将处理 {len(files_to_process)} 个新文件")
+        
+        if files_to_skip:
+            logger.info(f"   📋 跳过的文件列表:")
+            for file in files_to_skip[:10]:  # 只显示前10个
+                logger.info(f"      - {file.name}")
+            if len(files_to_skip) > 10:
+                logger.info(f"      ... 还有 {len(files_to_skip) - 10} 个文件")
+        
+        return files_to_process, files_to_skip
+
     def process_parallel(self, input_dir: str, output_dir: str) -> Dict[str, Any]:
         """并行处理所有markdown文件"""
         start_time = time.time()
@@ -233,18 +251,40 @@ class AzureSimpleParallelProcessor:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"🚀 开始并行处理 {len(markdown_files)} 个文件，使用 {self.max_workers} 个线程")
+        # 扫描已存在的文件
+        files_to_process, files_to_skip = self.scan_existing_files(markdown_files, output_path)
+        
+        logger.info(f"🚀 开始并行处理 {len(files_to_process)} 个文件，使用 {self.max_workers} 个线程")
         
         # 并行处理
         results = []
         failed_files = []
         skipped_files = []
         
+        # 先处理跳过的文件，直接加载已存在的数据
+        for file in files_to_skip:
+            existing_data = self.load_existing_data(output_path, file.stem)
+            if existing_data:
+                skipped_result = {
+                    "file_path": str(file),
+                    "file_name": file.name,
+                    "status": "skipped",
+                    "start_time": datetime.now().isoformat(),
+                    "end_time": datetime.now().isoformat(),
+                    "processing_time": 0.0,
+                    "error": None,
+                    "training_data": existing_data["training_data"],
+                    "judge_data": existing_data["judge_data"],
+                    "statistics": existing_data["statistics"]
+                }
+                skipped_files.append(skipped_result)
+                results.append(skipped_result)
+        
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # 提交所有任务
+            # 只提交需要处理的任务
             future_to_file = {
                 executor.submit(self.process_single_file, file, output_path): file 
-                for file in markdown_files
+                for file in files_to_process
             }
             
             # 收集结果
@@ -289,13 +329,15 @@ class AzureSimpleParallelProcessor:
         successful_files = len([r for r in results if r["status"] == "completed"])
         statistics = {
             "total_files": len(markdown_files),
+            "files_to_process": len(files_to_process),
+            "files_to_skip": len(files_to_skip),
             "successful_files": successful_files,
             "skipped_files": len(skipped_files),
             "failed_files": len(failed_files),
             "total_training_items": len(all_training_data),
             "total_judge_items": len(all_judge_data),
             "total_processing_time": total_time,
-            "average_time_per_file": total_time / len(markdown_files) if markdown_files else 0,
+            "average_time_per_file": total_time / len(files_to_process) if files_to_process else 0,
             "skip_existing_enabled": self.skip_existing
         }
         
