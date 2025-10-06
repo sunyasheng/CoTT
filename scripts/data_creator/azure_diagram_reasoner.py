@@ -27,6 +27,18 @@ from prompts_template.prompt_manager import prompt_manager
 from langchain.schema import Document
 HAS_LANGCHAIN = True
 
+# SentenceTransformer imports for local embeddings (强制使用，避免Azure API限制)
+try:
+    from sentence_transformers import SentenceTransformer
+    import torch
+    HAS_SENTENCE_TRANSFORMERS = True
+    print("✅ SentenceTransformer 已就绪 - 将强制使用本地模型避免API限制")
+except ImportError:
+    HAS_SENTENCE_TRANSFORMERS = False
+    print("❌ SentenceTransformer 未安装！")
+    print("🚫 我们强制使用本地模型以避免Azure API rate限制")
+    print("📦 请安装: pip install sentence-transformers torch")
+
 from dotenv import load_dotenv
 HAS_DOTENV = True
 
@@ -319,35 +331,83 @@ def classify_figures_with_gpt(figures: List[Dict], paper_title: str = "") -> Lis
 class FAISSRetriever:
     """基于FAISS的密集向量检索器"""
     
+    # 类级别的模型缓存，所有实例共享同一个模型
+    _shared_model = None
+    _shared_embeddings = None
+    
     def __init__(self):
         self.vector_store = None
         self.documents = []
         self.embeddings = None
         
     def _get_embeddings(self):
-        """获取embedding模型"""
+        """获取embedding模型 - 强制使用SentenceTransformer避免API限制"""
         if self.embeddings is not None:
             return self.embeddings
-            
-        # 检查Azure OpenAI配置
-        if os.getenv("AZURE_OPENAI_ENDPOINT") and os.getenv("AZURE_OPENAI_API_KEY"):
-            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-            api_key = os.getenv("AZURE_OPENAI_API_KEY")
-            api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-06-01")
-            
-            self.embeddings = AzureOpenAIEmbeddings(
-                azure_endpoint=endpoint,
-                openai_api_version=api_version,
-                openai_api_key=api_key,
-                model="text-embedding-3-large"
-            )
-            print("   🔗 使用 Azure OpenAI Embeddings")
-        else:
-            # 使用OpenAI API
-            self.embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-            print("   🔗 使用 OpenAI Embeddings")
         
-        return self.embeddings
+        # 强制使用SentenceTransformer本地模型（避免Azure API rate限制）
+        if not HAS_SENTENCE_TRANSFORMERS:
+            raise ImportError(
+                "❌ SentenceTransformer 未安装！\n"
+                "请安装: pip install sentence-transformers torch\n"
+                "我们强制使用本地模型以避免Azure API限制。"
+            )
+        
+        try:
+            # 检查是否已有共享的模型
+            if FAISSRetriever._shared_embeddings is not None:
+                self.embeddings = FAISSRetriever._shared_embeddings
+                print(f"   🔗 复用共享的 SentenceTransformer Embeddings")
+                return self.embeddings
+            
+            # 首次加载模型
+            print("   🚀 强制使用 SentenceTransformer 本地模型...")
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"   📱 检测到设备: {device}")
+            
+            model = SentenceTransformer('all-mpnet-base-v2', device=device)
+            print(f"   ✅ SentenceTransformer 模型加载成功")
+            
+            # 创建自定义的embeddings类来适配langchain
+            try:
+                from langchain.embeddings.base import Embeddings
+            except ImportError:
+                from langchain_core.embeddings import Embeddings
+            
+            class SentenceTransformerEmbeddings(Embeddings):
+                def __init__(self, model):
+                    self.model = model
+                
+                def embed_documents(self, texts):
+                    """嵌入文档列表"""
+                    return self.model.encode(texts).tolist()
+                
+                def embed_query(self, text):
+                    """嵌入单个查询"""
+                    return self.model.encode([text])[0].tolist()
+            
+            # 创建embeddings实例并缓存到类级别
+            FAISSRetriever._shared_model = model
+            FAISSRetriever._shared_embeddings = SentenceTransformerEmbeddings(model)
+            self.embeddings = FAISSRetriever._shared_embeddings
+            
+            print(f"   🔗 首次加载 SentenceTransformer Embeddings (设备: {device})")
+            print(f"   💾 模型已缓存，后续实例将复用此模型")
+            print(f"   🚫 已禁用Azure API，避免rate限制问题")
+            return self.embeddings
+            
+        except Exception as e:
+            error_msg = (
+                f"❌ SentenceTransformer 初始化失败: {e}\n"
+                f"🔧 解决方案:\n"
+                f"   1. 确保已安装: pip install sentence-transformers torch\n"
+                f"   2. 检查网络连接（首次使用需要下载模型）\n"
+                f"   3. 确保有足够的磁盘空间\n"
+                f"   4. 如果使用GPU，确保CUDA环境正确配置\n"
+                f"🚫 我们不再使用Azure API以避免rate限制问题"
+            )
+            print(error_msg)
+            raise RuntimeError(error_msg)
     
     def fit(self, documents: List[str]):
         """构建FAISS索引"""
