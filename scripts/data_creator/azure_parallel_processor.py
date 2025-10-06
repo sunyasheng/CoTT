@@ -262,7 +262,11 @@ class AzureSimpleParallelProcessor:
         skipped_files = []
         
         # 先处理跳过的文件，直接加载已存在的数据
-        for file in files_to_skip:
+        logger.info(f"📥 加载 {len(files_to_skip)} 个已存在文件的数据...")
+        for i, file in enumerate(files_to_skip, 1):
+            if i % 1000 == 0:  # 每1000个文件显示一次进度
+                logger.info(f"   📥 已加载 {i}/{len(files_to_skip)} 个跳过文件")
+            
             existing_data = self.load_existing_data(output_path, file.stem)
             if existing_data:
                 skipped_result = {
@@ -279,6 +283,9 @@ class AzureSimpleParallelProcessor:
                 }
                 skipped_files.append(skipped_result)
                 results.append(skipped_result)
+        
+        if files_to_skip:
+            logger.info(f"✅ 完成加载 {len(skipped_files)} 个跳过文件的数据")
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # 只提交需要处理的任务
