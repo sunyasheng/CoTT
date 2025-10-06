@@ -19,6 +19,7 @@ import re
 import json
 import requests
 import base64
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 from enum import Enum
@@ -65,6 +66,8 @@ class HybridDiagramReasoner:
     
     def __init__(self, api_source: APISource = APISource.PAPYRUS):
         self.api_source = api_source
+        self.last_api_call_time = 0
+        self.api_call_interval = 1.0  # 1秒间隔，避免rate limit
         self.load_env_vars()
         self.setup_api_config()
     
@@ -214,6 +217,64 @@ class HybridDiagramReasoner:
             return self.papyrus_endpoint
         return ""
     
+    def make_api_request_with_retry(self, payload: Dict, max_retries: int = 3, delay: float = 2.0) -> Dict:
+        """带重试机制的API请求"""
+        for attempt in range(max_retries):
+            try:
+                # 添加请求间隔，避免rate limit
+                current_time = time.time()
+                time_since_last_call = current_time - self.last_api_call_time
+                if time_since_last_call < self.api_call_interval:
+                    sleep_time = self.api_call_interval - time_since_last_call
+                    print(f"   ⏳ 等待 {sleep_time:.1f} 秒避免rate limit...")
+                    time.sleep(sleep_time)
+                
+                url = self.get_api_url()
+                headers = self.get_api_headers()
+                
+                # 如果是Papyrus API且token可能过期，重新获取token
+                if self.api_source == APISource.PAPYRUS and attempt > 0:
+                    print(f"   🔄 重试 {attempt + 1}/{max_retries}，重新获取token...")
+                    self.setup_papyrus_auth()
+                    headers = self.get_api_headers()
+                
+                response = requests.post(url, headers=headers, json=payload, timeout=180)
+                self.last_api_call_time = time.time()  # 更新最后调用时间
+                
+                if response.status_code == 401:
+                    print(f"   ⚠️ 401错误 (尝试 {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        print(f"   ⏳ 等待 {delay} 秒后重试...")
+                        time.sleep(delay)
+                        delay *= 1.5  # 指数退避
+                        continue
+                    else:
+                        response.raise_for_status()
+                elif response.status_code == 429:
+                    print(f"   ⚠️ 429 Rate Limit (尝试 {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        wait_time = delay * (2 ** attempt)  # 指数退避
+                        print(f"   ⏳ 等待 {wait_time} 秒后重试...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        response.raise_for_status()
+                else:
+                    response.raise_for_status()
+                
+                return response.json()
+                
+            except requests.exceptions.RequestException as e:
+                print(f"   ❌ API请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    print(f"   ⏳ 等待 {delay} 秒后重试...")
+                    time.sleep(delay)
+                    delay *= 1.5
+                else:
+                    raise e
+        
+        return {"error": f"API request failed after {max_retries} attempts"}
+    
     def extract_all_figures_from_markdown(self, markdown_content: str) -> List[Dict]:
         """提取所有图片信息，不做任何过滤"""
         figures = []
@@ -309,13 +370,7 @@ class HybridDiagramReasoner:
         }
         
         try:
-            url = self.get_api_url()
-            headers = self.get_api_headers()
-            
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            response.raise_for_status()
-            
-            data = response.json()
+            data = self.make_api_request_with_retry(payload, max_retries=3, delay=2.0)
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
             
             # 尝试解析JSON
@@ -410,13 +465,7 @@ class HybridDiagramReasoner:
         }
         
         try:
-            url = self.get_api_url()
-            headers = self.get_api_headers()
-            
-            response = requests.post(url, headers=headers, json=payload, timeout=180)
-            response.raise_for_status()
-            
-            data = response.json()
+            data = self.make_api_request_with_retry(payload, max_retries=3, delay=3.0)
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
             
             # 尝试解析JSON
