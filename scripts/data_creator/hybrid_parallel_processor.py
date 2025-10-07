@@ -9,10 +9,13 @@
 4. 支持跳过已生成的训练数据文件（节省时间和资源）
 5. 支持多API源（Papyrus和Azure OpenAI）
 6. 合并所有结果
+7. 日志文件保存到 /dev/shm/yasheng 目录（避免磁盘空间不足）
 
 使用方法：
 python hybrid_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4 --api_source papyrus
 python hybrid_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4 --api_source azure --no-skip-existing
+
+注意：日志文件将保存到 /dev/shm/yasheng/hybrid_parallel_processor.log
 """
 
 import os
@@ -35,25 +38,28 @@ except ImportError as e:
     print(f"❌ 无法导入hybrid_diagram_reasoner: {e}")
     sys.exit(1)
 
-# 设置日志 - 使用轮转日志避免磁盘空间不足
-from logging.handlers import RotatingFileHandler
+# 设置日志目录到 /dev/shm/yasheng
+import os
+from pathlib import Path
 
-# 创建轮转日志处理器，限制单个文件大小为10MB，最多保留3个文件
-file_handler = RotatingFileHandler(
-    'hybrid_parallel_processor.log', 
-    maxBytes=10*1024*1024,  # 10MB
-    backupCount=3
-)
+# 确保日志目录存在
+log_dir = Path("/dev/shm/yasheng")
+log_dir.mkdir(parents=True, exist_ok=True)
 
+# 设置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        file_handler,
+        logging.FileHandler(log_dir / 'hybrid_parallel_processor.log'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
+
+# 输出日志文件位置信息
+print(f"📝 日志文件将保存到: {log_dir / 'hybrid_parallel_processor.log'}")
+print(f"🗂️ 临时目录: {log_dir}")
 
 
 class SimpleParallelProcessor:
@@ -64,73 +70,37 @@ class SimpleParallelProcessor:
         self.max_workers = max_workers
         self.skip_existing = skip_existing
         self.reasoner = None
-        self.cleanup_temp_files()
+        self.temp_dir = Path("/dev/shm/yasheng")
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.cleanup_old_logs()
     
-    def cleanup_temp_files(self):
-        """清理临时文件和旧日志文件"""
+    def cleanup_old_logs(self):
+        """清理旧的日志文件到临时目录"""
         try:
             import glob
             import os
             
             # 清理旧的日志文件
             log_patterns = [
-                'simple_parallel_processor.log*',
                 'hybrid_parallel_processor.log*',
-                '*.log.*'  # 轮转的日志文件
+                'simple_parallel_processor.log*',
+                '*.log.*'
             ]
             
             for pattern in log_patterns:
                 for file_path in glob.glob(pattern):
                     try:
-                        # 只删除超过1天的日志文件
-                        if os.path.getmtime(file_path) < time.time() - 86400:  # 24小时
-                            os.remove(file_path)
-                            logger.info(f"🗑️ 清理旧日志文件: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"⚠️ 清理日志文件失败: {file_path}, 错误: {e}")
-            
-            # 清理临时文件
-            temp_patterns = [
-                '*.tmp',
-                '*.temp',
-                '__pycache__',
-                '*.pyc'
-            ]
-            
-            for pattern in temp_patterns:
-                for file_path in glob.glob(pattern, recursive=True):
-                    try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                        elif os.path.isdir(file_path):
+                        # 移动旧日志文件到临时目录而不是删除
+                        if os.path.exists(file_path):
                             import shutil
-                            shutil.rmtree(file_path)
-                        logger.info(f"🗑️ 清理临时文件: {file_path}")
+                            shutil.move(file_path, self.temp_dir / os.path.basename(file_path))
+                            logger.info(f"🗑️ 移动旧日志文件到临时目录: {file_path}")
                     except Exception as e:
-                        logger.warning(f"⚠️ 清理临时文件失败: {file_path}, 错误: {e}")
+                        logger.warning(f"⚠️ 移动日志文件失败: {file_path}, 错误: {e}")
                         
         except Exception as e:
-            logger.warning(f"⚠️ 清理临时文件时出错: {e}")
+            logger.warning(f"⚠️ 清理旧日志时出错: {e}")
     
-    def check_disk_space(self, path: str = ".") -> bool:
-        """检查磁盘空间是否充足"""
-        try:
-            import shutil
-            total, used, free = shutil.disk_usage(path)
-            free_gb = free // (1024**3)
-            
-            if free_gb < 1:  # 少于1GB空间
-                logger.error(f"❌ 磁盘空间不足！剩余空间: {free_gb}GB")
-                return False
-            elif free_gb < 5:  # 少于5GB空间
-                logger.warning(f"⚠️ 磁盘空间较少，剩余: {free_gb}GB")
-            
-            logger.info(f"💾 磁盘空间检查通过，剩余: {free_gb}GB")
-            return True
-        except Exception as e:
-            logger.warning(f"⚠️ 无法检查磁盘空间: {e}")
-            return True  # 如果检查失败，继续执行
-        
     def initialize_reasoner(self):
         """初始化reasoner"""
         try:
@@ -330,10 +300,6 @@ class SimpleParallelProcessor:
         """并行处理所有markdown文件"""
         start_time = time.time()
         
-        # 检查磁盘空间
-        if not self.check_disk_space():
-            return {"error": "磁盘空间不足，请清理磁盘后重试"}
-        
         # 初始化reasoner
         if not self.initialize_reasoner():
             return {"error": "初始化reasoner失败"}
@@ -403,11 +369,9 @@ class SimpleParallelProcessor:
                         logger.error(f"❌ 文件处理失败: {file.name}")
                     elif result["status"] == "skipped":
                         skipped_files.append(result)
-                        # 减少跳过文件的日志输出
+                        logger.info(f"⏭️ 文件已跳过: {file.name}")
                     else:
-                        # 减少成功处理的日志输出，只在每100个文件时输出一次
-                        if len([r for r in results if r["status"] == "completed"]) % 100 == 0:
-                            logger.info(f"✅ 已处理 {len([r for r in results if r['status'] == 'completed'])} 个文件")
+                        logger.info(f"✅ 文件处理完成: {file.name}")
                         
                 except Exception as e:
                     logger.error(f"❌ 处理文件时出现异常 {file.name}: {e}")
