@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-简单并行处理器 - 直接复用hybrid_diagram_reasoner.py的逻辑
+混合并行处理器 - 直接复用hybrid_diagram_reasoner.py的逻辑
 
 功能：
 1. 扫描指定目录下的所有markdown文件
 2. 使用多线程并行处理每个文件
 3. 直接调用hybrid_diagram_reasoner.py中的test_smart_markdown_paper函数
-4. 合并所有结果
+4. 支持跳过已生成的训练数据文件（节省时间和资源）
+5. 支持多API源（Papyrus和Azure OpenAI）
+6. 合并所有结果
 
 使用方法：
-python hybrid_simple_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4
+python hybrid_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4 --api_source papyrus
+python hybrid_parallel_processor.py --input_dir /path/to/markdown/files --output_dir /path/to/output --workers 4 --api_source azure --no-skip-existing
 """
 
 import os
@@ -45,11 +48,12 @@ logger = logging.getLogger(__name__)
 
 
 class SimpleParallelProcessor:
-    """简单并行处理器 - 直接复用原有逻辑"""
+    """混合并行处理器 - 支持跳过已生成数据和多API源"""
     
-    def __init__(self, api_source: APISource = APISource.PAPYRUS, max_workers: int = 4):
+    def __init__(self, api_source: APISource = APISource.PAPYRUS, max_workers: int = 4, skip_existing: bool = True):
         self.api_source = api_source
         self.max_workers = max_workers
+        self.skip_existing = skip_existing
         self.reasoner = None
         
     def initialize_reasoner(self):
@@ -79,6 +83,59 @@ class SimpleParallelProcessor:
         
         logger.info(f"📁 在 {input_dir} 中找到 {len(markdown_files)} 个markdown文件")
         return markdown_files
+    
+    def check_existing_data(self, output_dir: Path, file_name: str) -> bool:
+        """检查是否已存在训练数据文件"""
+        file_output_dir = output_dir / file_name
+        training_file = file_output_dir / f"{file_name}_training_data.json"
+        judge_file = file_output_dir / f"{file_name}_judge_data.json"
+        
+        # 检查两个文件是否都存在且不为空
+        if training_file.exists() and judge_file.exists():
+            try:
+                # 检查文件内容是否有效
+                with open(training_file, 'r', encoding='utf-8') as f:
+                    training_data = json.load(f)
+                with open(judge_file, 'r', encoding='utf-8') as f:
+                    judge_data = json.load(f)
+                
+                # 检查数据是否为空
+                if training_data and judge_data:
+                    logger.info(f"✅ 发现已存在的训练数据: {file_name}")
+                    return True
+                else:
+                    logger.info(f"⚠️ 训练数据文件存在但为空: {file_name}")
+                    return False
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"⚠️ 训练数据文件损坏: {file_name}, 错误: {e}")
+                return False
+        
+        return False
+
+    def load_existing_data(self, output_dir: Path, file_name: str) -> Dict[str, Any]:
+        """加载已存在的训练数据"""
+        file_output_dir = output_dir / file_name
+        training_file = file_output_dir / f"{file_name}_training_data.json"
+        judge_file = file_output_dir / f"{file_name}_judge_data.json"
+        
+        try:
+            with open(training_file, 'r', encoding='utf-8') as f:
+                training_data = json.load(f)
+            with open(judge_file, 'r', encoding='utf-8') as f:
+                judge_data = json.load(f)
+            
+            return {
+                "training_data": training_data,
+                "judge_data": judge_data,
+                "statistics": {
+                    "total_figures": len(training_data),  # 估算
+                    "diagram_figures": len(training_data),
+                    "processed_results": len(training_data)
+                }
+            }
+        except Exception as e:
+            logger.error(f"❌ 加载已存在数据失败: {file_name}, 错误: {e}")
+            return None
     
     def process_single_file(self, markdown_file: Path, output_dir: Path) -> Dict[str, Any]:
         """处理单个markdown文件 - 直接调用原有函数"""
@@ -165,6 +222,35 @@ class SimpleParallelProcessor:
         
         logger.info(f"💾 保存结果到: {output_dir}")
     
+    def scan_existing_files(self, markdown_files: List[Path], output_dir: Path) -> tuple:
+        """扫描已存在的文件，返回需要处理和跳过的文件列表"""
+        if not self.skip_existing:
+            return markdown_files, []
+        
+        files_to_process = []
+        files_to_skip = []
+        
+        logger.info(f"🔍 扫描已存在的训练数据文件...")
+        
+        for file in markdown_files:
+            if self.check_existing_data(output_dir, file.stem):
+                files_to_skip.append(file)
+            else:
+                files_to_process.append(file)
+        
+        logger.info(f"📊 扫描结果:")
+        logger.info(f"   ⏭️ 将跳过 {len(files_to_skip)} 个已存在数据的文件")
+        logger.info(f"   🔄 将处理 {len(files_to_process)} 个新文件")
+        
+        if files_to_skip:
+            logger.info(f"   📋 跳过的文件列表:")
+            for file in files_to_skip[:10]:  # 只显示前10个
+                logger.info(f"      - {file.name}")
+            if len(files_to_skip) > 10:
+                logger.info(f"      ... 还有 {len(files_to_skip) - 10} 个文件")
+        
+        return files_to_process, files_to_skip
+    
     def process_parallel(self, input_dir: str, output_dir: str) -> Dict[str, Any]:
         """并行处理所有markdown文件"""
         start_time = time.time()
@@ -182,17 +268,47 @@ class SimpleParallelProcessor:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"🚀 开始并行处理 {len(markdown_files)} 个文件，使用 {self.max_workers} 个线程")
+        # 扫描已存在的文件
+        files_to_process, files_to_skip = self.scan_existing_files(markdown_files, output_path)
+        
+        logger.info(f"🚀 开始并行处理 {len(files_to_process)} 个文件，使用 {self.max_workers} 个线程")
         
         # 并行处理
         results = []
         failed_files = []
+        skipped_files = []
+        
+        # 先处理跳过的文件，直接加载已存在的数据
+        logger.info(f"📥 加载 {len(files_to_skip)} 个已存在文件的数据...")
+        for i, file in enumerate(files_to_skip, 1):
+            if i % 1000 == 0:  # 每1000个文件显示一次进度
+                logger.info(f"   📥 已加载 {i}/{len(files_to_skip)} 个跳过文件")
+            
+            existing_data = self.load_existing_data(output_path, file.stem)
+            if existing_data:
+                skipped_result = {
+                    "file_path": str(file),
+                    "file_name": file.name,
+                    "status": "skipped",
+                    "start_time": datetime.now().isoformat(),
+                    "end_time": datetime.now().isoformat(),
+                    "processing_time": 0.0,
+                    "error": None,
+                    "training_data": existing_data["training_data"],
+                    "judge_data": existing_data["judge_data"],
+                    "statistics": existing_data["statistics"]
+                }
+                skipped_files.append(skipped_result)
+                results.append(skipped_result)
+        
+        if files_to_skip:
+            logger.info(f"✅ 完成加载 {len(skipped_files)} 个跳过文件的数据")
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # 提交所有任务
+            # 只提交需要处理的任务
             future_to_file = {
                 executor.submit(self.process_single_file, file, output_path): file 
-                for file in markdown_files
+                for file in files_to_process
             }
             
             # 收集结果
@@ -205,6 +321,9 @@ class SimpleParallelProcessor:
                     if result["status"] == "failed":
                         failed_files.append(result)
                         logger.error(f"❌ 文件处理失败: {file.name}")
+                    elif result["status"] == "skipped":
+                        skipped_files.append(result)
+                        logger.info(f"⏭️ 文件已跳过: {file.name}")
                     else:
                         logger.info(f"✅ 文件处理完成: {file.name}")
                         
@@ -222,7 +341,7 @@ class SimpleParallelProcessor:
         all_judge_data = []
         
         for result in results:
-            if result["status"] == "completed":
+            if result["status"] in ["completed", "skipped"]:
                 all_training_data.extend(result.get("training_data", []))
                 all_judge_data.extend(result.get("judge_data", []))
         
@@ -231,14 +350,19 @@ class SimpleParallelProcessor:
         
         # 生成统计信息
         total_time = time.time() - start_time
+        successful_files = len([r for r in results if r["status"] == "completed"])
         statistics = {
             "total_files": len(markdown_files),
-            "successful_files": len(results) - len(failed_files),
+            "files_to_process": len(files_to_process),
+            "files_to_skip": len(files_to_skip),
+            "successful_files": successful_files,
+            "skipped_files": len(skipped_files),
             "failed_files": len(failed_files),
             "total_training_items": len(all_training_data),
             "total_judge_items": len(all_judge_data),
             "total_processing_time": total_time,
-            "average_time_per_file": total_time / len(markdown_files) if markdown_files else 0
+            "average_time_per_file": total_time / len(files_to_process) if files_to_process else 0,
+            "skip_existing_enabled": self.skip_existing
         }
         
         logger.info(f"🎉 并行处理完成！")
@@ -248,6 +372,7 @@ class SimpleParallelProcessor:
             "statistics": statistics,
             "results": results,
             "failed_files": failed_files,
+            "skipped_files": skipped_files,
             "all_training_data": all_training_data,
             "all_judge_data": all_judge_data
         }
@@ -275,12 +400,14 @@ class SimpleParallelProcessor:
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="简单并行处理markdown文件中的图表")
+    parser = argparse.ArgumentParser(description="混合并行处理markdown文件中的图表，支持跳过已生成数据")
     parser.add_argument("--input_dir", "-i", required=True, help="输入markdown文件目录")
     parser.add_argument("--output_dir", "-o", required=True, help="输出目录")
     parser.add_argument("--workers", "-w", type=int, default=4, help="并行工作线程数")
     parser.add_argument("--api_source", "-a", choices=["papyrus", "azure"], default="papyrus", 
                        help="API源选择")
+    parser.add_argument("--no-skip-existing", action="store_true", 
+                       help="禁用跳过已存在训练数据的功能，强制重新处理所有文件")
     
     args = parser.parse_args()
     
@@ -288,7 +415,7 @@ def main():
     api_source = APISource.PAPYRUS if args.api_source == "papyrus" else APISource.AZURE_OPENAI
     
     # 创建处理器
-    processor = SimpleParallelProcessor(api_source=api_source, max_workers=args.workers)
+    processor = SimpleParallelProcessor(api_source=api_source, max_workers=args.workers, skip_existing=not args.no_skip_existing)
     
     # 开始处理
     result = processor.process_parallel(args.input_dir, args.output_dir)
