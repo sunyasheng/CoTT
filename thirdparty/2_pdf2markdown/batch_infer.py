@@ -96,7 +96,9 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
                 "--device", "cuda",
                 "--max-num-seqs", "8",  # 增加并发数，适合A100
                 "--max-model-len", "12288",  # 保持原始值，避免bug
-                "--gpu-memory-utilization", "0.9"  # 提高显存利用率，适合A100
+                "--gpu-memory-utilization", "0.9",  # 提高显存利用率，适合A100
+                "--f_draw_layout_bbox", "False",  # 禁用 layout PDF 生成
+                "--f_dump_orig_pdf", "False"  # 禁用 original PDF 生成
             ]
             
             print(f"Processing batch of {len(remaining_pdfs)} PDFs with single model load...")
