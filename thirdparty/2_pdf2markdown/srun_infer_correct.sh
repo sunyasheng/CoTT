@@ -300,6 +300,7 @@ for (( i=0; i<SHARDS; i++ )); do
   echo "  启动 Shard ${i}: indices ${START}-${END}"
 
   srun \
+    --account conf-cvpr-2025.11.21-schmidhj \
     --gpus=1 \
     --ntasks=1 \
     --cpus-per-task=4 \
