@@ -51,22 +51,50 @@ class AzureSimpleParallelProcessor:
         self.max_workers = max_workers
         self.skip_existing = skip_existing
         
-    def find_markdown_files(self, input_dir: str) -> List[Path]:
-        """扫描目录下的所有markdown文件"""
+    def find_markdown_files(self, input_dir: str, dedupe: bool = True) -> List[Path]:
+        """扫描目录下的所有markdown文件，支持按arxiv ID去重"""
         input_path = Path(input_dir)
         if not input_path.exists():
             logger.error(f"❌ 输入目录不存在: {input_dir}")
             return []
         
         # 查找所有.md文件
-        markdown_files = []
+        all_markdown_files = []
         for pattern in ["**/*.md", "**/*.markdown"]:
-            markdown_files.extend(input_path.glob(pattern))
+            all_markdown_files.extend(input_path.glob(pattern))
         
         # 过滤掉隐藏文件和临时文件
-        markdown_files = [f for f in markdown_files if not f.name.startswith('.')]
+        all_markdown_files = [f for f in all_markdown_files if not f.name.startswith('.')]
         
-        logger.info(f"📁 在 {input_dir} 中找到 {len(markdown_files)} 个markdown文件")
+        if not dedupe:
+            logger.info(f"📁 在 {input_dir} 中找到 {len(all_markdown_files)} 个markdown文件")
+            return all_markdown_files
+        
+        # 按arxiv ID去重，只保留每个论文的最新版本
+        import re
+        paper_groups = {}
+        
+        for markdown_file in all_markdown_files:
+            paper_name = markdown_file.stem  # 例如: 1905.12185v3
+            # 提取arxiv ID (例如: 1905.12185v3 -> 1905.12185)
+            match = re.match(r'(\d{4}\.\d{4,5})', paper_name)
+            if match:
+                arxiv_id = match.group(1)
+                if arxiv_id not in paper_groups:
+                    paper_groups[arxiv_id] = []
+                paper_groups[arxiv_id].append(markdown_file)
+        
+        # 每个arxiv ID只选择最新版本
+        markdown_files = []
+        for arxiv_id, versions in paper_groups.items():
+            # 按版本排序，选择最后一个（最新版本）
+            versions.sort(key=lambda x: x.stem)
+            selected_version = versions[-1]
+            markdown_files.append(selected_version)
+            if len(versions) > 1:
+                logger.info(f"📚 {arxiv_id}: 找到 {len(versions)} 个版本，选择最新版本 {selected_version.stem}")
+        
+        logger.info(f"📁 在 {input_dir} 中找到 {len(all_markdown_files)} 个markdown文件，去重后 {len(markdown_files)} 个唯一论文")
         return markdown_files
     
     def check_existing_data(self, output_dir: Path, file_name: str) -> bool:
@@ -238,12 +266,12 @@ class AzureSimpleParallelProcessor:
         
         return files_to_process, files_to_skip
 
-    def process_parallel(self, input_dir: str, output_dir: str) -> Dict[str, Any]:
+    def process_parallel(self, input_dir: str, output_dir: str, dedupe: bool = True) -> Dict[str, Any]:
         """并行处理所有markdown文件"""
         start_time = time.time()
         
-        # 查找所有markdown文件
-        markdown_files = self.find_markdown_files(input_dir)
+        # 查找所有markdown文件（支持去重）
+        markdown_files = self.find_markdown_files(input_dir, dedupe=dedupe)
         if not markdown_files:
             return {"error": "没有找到markdown文件"}
         
@@ -389,14 +417,16 @@ def main():
     parser.add_argument("--workers", "-w", type=int, default=4, help="并行工作线程数")
     parser.add_argument("--no-skip-existing", action="store_true", 
                        help="禁用跳过已存在训练数据的功能，强制重新处理所有文件")
+    parser.add_argument("--no-dedupe", action="store_true", 
+                       help="禁用去重功能，处理所有版本")
     
     args = parser.parse_args()
     
     # 创建处理器
     processor = AzureSimpleParallelProcessor(max_workers=args.workers, skip_existing=not args.no_skip_existing)
     
-    # 开始处理
-    result = processor.process_parallel(args.input_dir, args.output_dir)
+    # 开始处理（支持去重控制）
+    result = processor.process_parallel(args.input_dir, args.output_dir, dedupe=not args.no_dedupe)
     
     if "error" in result:
         logger.error(f"❌ 处理失败: {result['error']}")

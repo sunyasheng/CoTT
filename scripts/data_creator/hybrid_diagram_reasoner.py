@@ -1269,8 +1269,26 @@ class FAISSRetriever:
 
 def main():
     """主函数 - 测试所有markdown论文的智能diagram分析"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="混合图表分析器 - 支持多API源")
+    parser.add_argument("--dedupe", action="store_true", default=True,
+                        help="按arxiv ID去重，只处理每个论文的最新版本 (默认: True)")
+    parser.add_argument("--no-dedupe", action="store_true", 
+                        help="不去重，处理所有版本")
+    parser.add_argument("--paper-id", type=str, 
+                        help="只处理指定的arxiv ID (例如: 1905.12185)")
+    
+    args = parser.parse_args()
+    
+    # 处理去重参数
+    dedupe = args.dedupe and not args.no_dedupe
+    
     print("🤖 混合图表分析器 - 支持多API源")
     print("=" * 60)
+    print(f"📚 去重模式: {'启用 (选择最新版本)' if dedupe else '禁用'}")
+    if args.paper_id:
+        print(f"🎯 指定论文ID: {args.paper_id}")
     
     # 检查是否有API配置
     has_azure_key = bool(os.getenv("AZURE_OPENAI_API_KEY"))
@@ -1293,13 +1311,59 @@ def main():
     papers_dir = Path(__file__).parent.parent.parent / "workspace" / "papers_markdown"
     
     # 获取所有论文目录
-    paper_dirs = [d for d in papers_dir.iterdir() if d.is_dir()]
+    all_paper_dirs = [d for d in papers_dir.iterdir() if d.is_dir()]
     
-    if not paper_dirs:
+    if not all_paper_dirs:
         print("❌ 未找到论文目录")
         return
     
-    print(f"📚 找到 {len(paper_dirs)} 个论文目录")
+    # 处理论文选择逻辑
+    if args.paper_id:
+        # 只处理指定的论文ID
+        paper_dirs = []
+        for paper_dir in all_paper_dirs:
+            paper_name = paper_dir.name
+            import re
+            match = re.match(r'(\d{4}\.\d{4,5})', paper_name)
+            if match and match.group(1) == args.paper_id:
+                paper_dirs.append(paper_dir)
+        
+        if not paper_dirs:
+            print(f"❌ 未找到指定的论文ID: {args.paper_id}")
+            return
+        
+        print(f"📚 找到 {len(paper_dirs)} 个匹配的论文版本")
+        
+    elif dedupe:
+        # 按arxiv ID去重，只保留每个论文的第一个版本
+        paper_groups = {}
+        for paper_dir in all_paper_dirs:
+            paper_name = paper_dir.name
+            # 提取arxiv ID (例如: 1905.12185v3 -> 1905.12185)
+            import re
+            match = re.match(r'(\d{4}\.\d{4,5})', paper_name)
+            if match:
+                arxiv_id = match.group(1)
+                if arxiv_id not in paper_groups:
+                    paper_groups[arxiv_id] = []
+                paper_groups[arxiv_id].append(paper_dir)
+        
+        # 每个arxiv ID只选择最后一个版本（最新版本）
+        paper_dirs = []
+        for arxiv_id, versions in paper_groups.items():
+            # 按版本排序，选择最后一个（最新版本）
+            versions.sort()
+            selected_version = versions[-1]
+            paper_dirs.append(selected_version)
+            if len(versions) > 1:
+                print(f"📚 {arxiv_id}: 找到 {len(versions)} 个版本，选择最新版本 {selected_version.name}")
+        
+        print(f"📚 去重后找到 {len(paper_dirs)} 个唯一论文")
+        
+    else:
+        # 不去重，处理所有版本
+        paper_dirs = all_paper_dirs
+        print(f"📚 处理所有 {len(paper_dirs)} 个论文版本")
     
     # 测试每个论文
     all_results = []
