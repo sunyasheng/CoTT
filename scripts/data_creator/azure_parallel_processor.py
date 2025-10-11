@@ -58,23 +58,32 @@ class AzureSimpleParallelProcessor:
             logger.error(f"❌ 输入目录不存在: {input_dir}")
             return []
         
-        # 查找所有.md文件
+        # 查找所有.md文件 - 添加进度提示
+        logger.info(f"🔍 开始扫描目录: {input_dir}")
+        logger.info(f"⏳ 这可能需要几分钟，请耐心等待...")
+        
         all_markdown_files = []
         for pattern in ["**/*.md", "**/*.markdown"]:
-            all_markdown_files.extend(input_path.glob(pattern))
+            logger.info(f"   扫描模式: {pattern}")
+            files = list(input_path.glob(pattern))
+            all_markdown_files.extend(files)
+            logger.info(f"   找到 {len(files)} 个文件")
         
         # 过滤掉隐藏文件和临时文件
         all_markdown_files = [f for f in all_markdown_files if not f.name.startswith('.')]
+        logger.info(f"✅ 扫描完成，共找到 {len(all_markdown_files)} 个markdown文件")
         
         if not dedupe:
             logger.info(f"📁 在 {input_dir} 中找到 {len(all_markdown_files)} 个markdown文件")
             return all_markdown_files
         
         # 按arxiv ID去重，只保留每个论文的最新版本
+        logger.info(f"🔄 开始去重处理...")
         import re
+        from tqdm import tqdm
         paper_groups = {}
         
-        for markdown_file in all_markdown_files:
+        for markdown_file in tqdm(all_markdown_files, desc="📋 分组", unit="文件"):
             paper_name = markdown_file.stem  # 例如: 1905.12185v3
             # 提取arxiv ID (例如: 1905.12185v3 -> 1905.12185)
             match = re.match(r'(\d{4}\.\d{4,5})', paper_name)
@@ -85,16 +94,23 @@ class AzureSimpleParallelProcessor:
                 paper_groups[arxiv_id].append(markdown_file)
         
         # 每个arxiv ID只选择最新版本
+        logger.info(f"📚 找到 {len(paper_groups)} 个唯一论文ID，开始选择最新版本...")
         markdown_files = []
+        duplicate_count = 0
         for arxiv_id, versions in paper_groups.items():
             # 按版本排序，选择最后一个（最新版本）
             versions.sort(key=lambda x: x.stem)
             selected_version = versions[-1]
             markdown_files.append(selected_version)
             if len(versions) > 1:
-                logger.info(f"📚 {arxiv_id}: 找到 {len(versions)} 个版本，选择最新版本 {selected_version.stem}")
+                duplicate_count += len(versions) - 1
+                if duplicate_count <= 10:  # 只显示前10个
+                    logger.info(f"📚 {arxiv_id}: 找到 {len(versions)} 个版本，选择 {selected_version.stem}")
         
-        logger.info(f"📁 在 {input_dir} 中找到 {len(all_markdown_files)} 个markdown文件，去重后 {len(markdown_files)} 个唯一论文")
+        if duplicate_count > 10:
+            logger.info(f"   ... 还有 {duplicate_count - 10} 个重复版本被跳过")
+        
+        logger.info(f"✅ 去重完成: {len(all_markdown_files)} 个文件 → {len(markdown_files)} 个唯一论文 (跳过 {duplicate_count} 个旧版本)")
         return markdown_files
     
     def check_existing_data(self, output_dir: Path, file_name: str) -> bool:
