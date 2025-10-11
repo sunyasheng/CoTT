@@ -58,16 +58,29 @@ class AzureSimpleParallelProcessor:
             logger.error(f"❌ 输入目录不存在: {input_dir}")
             return []
         
-        # 查找所有.md文件 - 添加进度提示
+        # 查找所有.md文件 - 只扫描md目录，跳过pdf等无用目录
         logger.info(f"🔍 开始扫描目录: {input_dir}")
-        logger.info(f"⏳ 这可能需要几分钟，请耐心等待...")
+        logger.info(f"⏳ 只扫描 md/ 子目录，跳过 pdf/ 等...")
         
         all_markdown_files = []
-        for pattern in ["**/*.md", "**/*.markdown"]:
+        # 优化：只扫描 md/ 目录下的文件
+        patterns = [
+            "md/**/*.md",           # 主要模式：md目录下的所有.md文件
+            "md/**/*.markdown",     # markdown扩展名
+            "temp_processing_shard_*/md/**/*.md",  # 如果有shard结构
+        ]
+        
+        for pattern in patterns:
             logger.info(f"   扫描模式: {pattern}")
-            files = list(input_path.glob(pattern))
-            all_markdown_files.extend(files)
-            logger.info(f"   找到 {len(files)} 个文件")
+            try:
+                files = list(input_path.glob(pattern))
+                if files:
+                    all_markdown_files.extend(files)
+                    logger.info(f"   ✅ 找到 {len(files)} 个文件")
+                else:
+                    logger.info(f"   ⏭️  未找到匹配文件")
+            except Exception as e:
+                logger.warning(f"   ⚠️  扫描失败: {e}")
         
         # 过滤掉隐藏文件和临时文件
         all_markdown_files = [f for f in all_markdown_files if not f.name.startswith('.')]
