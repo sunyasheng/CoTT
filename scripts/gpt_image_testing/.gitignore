@@ -1,0 +1,13 @@
+# 环境变量文件
+.env
+
+# 生成的图片
+generated_images/
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
