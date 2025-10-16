@@ -26,8 +26,9 @@ cd "$DATASET_ROOT"
 ########################################
 # 创建目标目录
 ########################################
-mkdir -p temp_processing/md temp_processing/pdf
-echo "[✓] 目标目录 temp_processing/{md,pdf} 已创建/存在"
+DEST_ROOT=${2:-"$DATASET_ROOT/temp_processing"}
+mkdir -p "$DEST_ROOT/md"
+echo "[✓] 目标目录 $DEST_ROOT/md 已创建/存在"
 
 ########################################
 # 合并各 shard
@@ -41,27 +42,16 @@ fi
 for shard in "${shards[@]}"; do
   echo "⏳ 合并 $shard ..."
   # 合并 md
-  rsync -a --ignore-existing "$shard/md/"  temp_processing/md/
-  # 合并 pdf
-  rsync -a --ignore-existing "$shard/pdf/" temp_processing/pdf/
+  rsync -a --ignore-existing "$shard/md/"  "$DEST_ROOT/md/"
 done
 echo "[✓] 文件合并完成"
 
 ########################################
-# 合并 pdf 列表文本
-########################################
-echo "⏳ 合并 shard_*_pdfs.txt ..."
-cat temp_processing_shard_*/shard_*_pdfs.txt > temp_processing/all_pdfs.txt
-echo "[✓] 列表文件 temp_processing/all_pdfs.txt 已生成"
-
-########################################
 # 统计数量
 ########################################
-MD_COUNT=$(find temp_processing/md  -type f | wc -l)
-PDF_COUNT=$(find temp_processing/pdf -type f | wc -l)
+MD_COUNT=$(find "$DEST_ROOT/md" -type f | wc -l)
 echo "文件统计:"
-echo "  md  : $MD_COUNT"
-echo "  pdf : $PDF_COUNT"
+echo "  md : $MD_COUNT"
 
 ########################################
 # 询问是否删除原分片
