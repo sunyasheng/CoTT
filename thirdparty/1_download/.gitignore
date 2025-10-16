@@ -1,9 +1,0 @@
-__pycache__/*
-output/*
-*/organized_arxiv_legacy/*
-thirdparty/paper2figure-dataset/organized_arxiv_legacy
-thirdparty/paper2figure-dataset/organized_arxiv_legacy/*
-arxiv_tools/sage-now-232008-e967ca646a53.json
-
-# Ignore GCP service account keys
-thirdparty/paper2figure-dataset/arxiv_tools/*.json
