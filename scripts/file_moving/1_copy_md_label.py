@@ -89,3 +89,6 @@ if __name__ == "__main__":
 
 # python 1_copy_md_label.py /home/suny0a/arxiv_dataset_ibex/reasoning \
 #                           /home/suny0a/blob/yasheng/arxiv_dataset/reasoning
+
+# python 1_copy_md_label.py  /dev/shm/yasheng/dir4upload_temp/reasoning \
+# /home/t2vg-a100-G2-0/yifan/sh-yifanyang-1/yasheng/arxiv_dataset/reasoning
