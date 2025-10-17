@@ -287,8 +287,8 @@ Please provide a detailed analysis."""
             diagram_short = caption
             diagram_long = f"{caption}\n\nContext: {context}" if context else caption
             
-                # Build training_data format (matching diagram_training_data.json structure)
-                training_data = {
+            # Build training_data format (matching diagram_training_data.json structure)
+            training_data = {
                     "data_quality": "valid",
                     "quality_issues": [],
                     "stage1_input": {
