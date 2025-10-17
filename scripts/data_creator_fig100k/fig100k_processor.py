@@ -67,6 +67,27 @@ class Fig100kProcessor:
         self.last_api_call_time = 0
         self.api_call_interval = 1.0  # 1 second interval to avoid rate limit
     
+    def find_image_file(self, figure_id: str, possible_dirs: List[str] = None) -> str:
+        """Find the actual image file for a figure_id"""
+        if possible_dirs is None:
+            possible_dirs = [
+                "Paper2Fig100k",
+                "/blob/yasheng/Paper2Fig100k",
+                "/dev/shm/yasheng/Paper2Fig100k",
+                "images",
+                "data"
+            ]
+        
+        image_extensions = ['.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG']
+        
+        for base_dir in possible_dirs:
+            for ext in image_extensions:
+                image_path = os.path.join(base_dir, f"{figure_id}{ext}")
+                if os.path.exists(image_path):
+                    return image_path
+        
+        return ""
+    
     def encode_image(self, image_path: str) -> str:
         """Encode image to base64"""
         try:
@@ -221,19 +242,35 @@ Please provide a detailed analysis."""
         }
         
         try:
-            # Extract basic information
-            caption = item.get("caption", "")
-            context = item.get("context", "")
-            image_path = item.get("image_path", "")
+            # Extract basic information from fig100k format
+            figure_id = item.get("figure_id", "")
+            captions = item.get("captions", [])
+            captions_norm = item.get("captions_norm", [])
+            aspect = item.get("aspect", 1.0)
             
-            if not caption:
+            # Use the first caption as the main caption, or normalized caption if no captions
+            if captions and len(captions) > 0:
+                caption = captions[0]
+                context = "; ".join(captions[1:]) if len(captions) > 1 else ""
+            elif captions_norm and len(captions_norm) > 0:
+                caption = captions_norm[0]
+                context = "; ".join(captions_norm[1:]) if len(captions_norm) > 1 else ""
+            else:
                 result["status"] = "failed"
-                result["error"] = "Missing caption"
+                result["error"] = "Missing captions"
+                return result
+            
+            # Find the actual image file
+            image_path = self.find_image_file(figure_id)
+            
+            if not figure_id:
+                result["status"] = "failed"
+                result["error"] = "Missing figure_id"
                 return result
             
             if not image_path:
                 result["status"] = "failed"
-                result["error"] = "Missing image_path"
+                result["error"] = f"Image file not found for figure_id: {figure_id}"
                 return result
             
             logger.info(f"🔄 Processing item {item_index}: {caption[:50]}...")
@@ -262,8 +299,10 @@ Please provide a detailed analysis."""
                 },
                 "metadata": {
                     "source": "fig100k",
-                    "original_caption": caption,
-                    "original_context": context,
+                    "figure_id": figure_id,
+                    "original_captions": captions,
+                    "original_captions_norm": captions_norm,
+                    "aspect": aspect,
                     "image_path": image_path,
                     "processed_time": datetime.now().isoformat()
                 }
@@ -278,8 +317,10 @@ Please provide a detailed analysis."""
                 "quality_score": 1.0,  # Default quality score
                 "metadata": {
                     "source": "fig100k",
-                    "original_caption": caption,
-                    "original_context": context,
+                    "figure_id": figure_id,
+                    "original_captions": captions,
+                    "original_captions_norm": captions_norm,
+                    "aspect": aspect,
                     "image_path": image_path,
                     "processed_time": datetime.now().isoformat()
                 }
