@@ -448,3 +448,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# python fig100k_processor.py --input_json /blob/yasheng/paper2fig_train.json --output_dir ./paper2fig_train_output --workers 4 --max_items 10
