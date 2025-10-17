@@ -257,27 +257,24 @@ class Fig100kProcessor:
         
         # Check if output files already exist
         training_file = output_dir / f"{image_name}_training.json"
-        judge_file = output_dir / f"{image_name}_judge.json"
         
-        if self.skip_existing and training_file.exists() and judge_file.exists():
+        if self.skip_existing and training_file.exists():
             try:
                 # Load existing data
                 with open(training_file, 'r', encoding='utf-8') as f:
                     training_data = json.load(f)
-                with open(judge_file, 'r', encoding='utf-8') as f:
-                    judge_data = json.load(f)
                 
                 result["status"] = "skipped"
                 result["training_data"] = training_data
-                result["judge_data"] = judge_data
+                result["judge_data"] = training_data  # Use same data for judge
                 result["end_time"] = datetime.now().isoformat()
                 result["processing_time"] = time.time() - start_time
                 
-                logger.info(f"⏭️ Skipped item {item_index} (files already exist): {image_name}")
+                logger.info(f"⏭️ Skipped item {item_index} (file already exists): {image_name}")
                 return result
                 
             except Exception as e:
-                logger.warning(f"⚠️ Failed to load existing files for {image_name}, will reprocess: {e}")
+                logger.warning(f"⚠️ Failed to load existing file for {image_name}, will reprocess: {e}")
         
         try:
             # Extract additional information
@@ -338,31 +335,12 @@ class Fig100kProcessor:
                     }
                 }
             
-            # Build judge_data format (matching diagram_training_data.json structure)
-            judge_data = {
-                    "data_quality": "valid",
-                    "quality_issues": [],
-                    "stage1_input": {
-                        "context": context if context else caption,
-                        "caption": caption
-                    },
-                    "stage2_input": {
-                        "diagram_description_short": diagram_short,
-                        "diagram_description_long": diagram_long
-                    },
-                    "stage2_output": {
-                        "thinking_short": thinking_results["thinking_short"],
-                        "thinking_long": thinking_results["thinking_long"],
-                        "image_path": image_path
-                    }
-                }
-            
             result["training_data"] = training_data
-            result["judge_data"] = judge_data
+            result["judge_data"] = training_data  # Use same data for judge
             result["status"] = "completed"
             
-            # Save individual files immediately
-            self.save_single_item_files(training_data, judge_data, output_dir, image_name)
+            # Save individual file immediately
+            self.save_single_item_file(training_data, output_dir, image_name)
             
             logger.info(f"✅ Completed processing item {item_index}: {image_name}")
             
@@ -376,23 +354,18 @@ class Fig100kProcessor:
         
         return result
     
-    def save_single_item_files(self, training_data: Dict, judge_data: Dict, output_dir: Path, image_name: str):
-        """Save individual training and judge data files for a single item"""
+    def save_single_item_file(self, training_data: Dict, output_dir: Path, image_name: str):
+        """Save individual training data file for a single item"""
         try:
             # Save training data
             training_file = output_dir / f"{image_name}_training.json"
             with open(training_file, 'w', encoding='utf-8') as f:
                 json.dump(training_data, f, ensure_ascii=False, indent=2)
             
-            # Save judge data
-            judge_file = output_dir / f"{image_name}_judge.json"
-            with open(judge_file, 'w', encoding='utf-8') as f:
-                json.dump(judge_data, f, ensure_ascii=False, indent=2)
-            
-            logger.debug(f"💾 Saved individual files for {image_name}")
+            logger.debug(f"💾 Saved training file for {image_name}")
             
         except Exception as e:
-            logger.error(f"❌ Failed to save individual files for {image_name}: {e}")
+            logger.error(f"❌ Failed to save training file for {image_name}: {e}")
     
     def load_fig100k_data(self, json_path: str) -> List[Dict[str, Any]]:
         """Load fig100k dataset"""
@@ -506,7 +479,7 @@ class Fig100kProcessor:
         with open(training_file, 'w', encoding='utf-8') as f:
             json.dump(training_data, f, ensure_ascii=False, indent=2)
         
-        # Save judge data
+        # Save judge data (same as training data for compatibility)
         judge_file = output_dir / "fig100k_judge_data.json"
         with open(judge_file, 'w', encoding='utf-8') as f:
             json.dump(judge_data, f, ensure_ascii=False, indent=2)
