@@ -306,8 +306,8 @@ Please provide a detailed analysis."""
                     }
                 }
             
-                # Build judge_data format (matching diagram_training_data.json structure)
-                judge_data = {
+            # Build judge_data format (matching diagram_training_data.json structure)
+            judge_data = {
                     "data_quality": "valid",
                     "quality_issues": [],
                     "stage1_input": {
