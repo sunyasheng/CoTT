@@ -190,17 +190,38 @@ class Fig100kProcessor:
             if "error" not in data:
                 response_content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 
+                # Debug: log the actual response content
+                logger.debug(f"🔍 Raw API response: {response_content[:200]}...")
+                
                 # Parse JSON response
                 try:
                     import json
-                    parsed_response = json.loads(response_content)
-                    results["thinking_short"] = parsed_response.get("thinking_short", "")
-                    results["thinking_long"] = parsed_response.get("thinking_long", "")
+                    if response_content.strip():
+                        # Clean up potential markdown formatting
+                        cleaned_content = response_content.strip()
+                        if cleaned_content.startswith("```json"):
+                            cleaned_content = cleaned_content[7:]
+                        if cleaned_content.endswith("```"):
+                            cleaned_content = cleaned_content[:-3]
+                        cleaned_content = cleaned_content.strip()
+                        
+                        parsed_response = json.loads(cleaned_content)
+                        results["thinking_short"] = parsed_response.get("thinking_short", "")
+                        results["thinking_long"] = parsed_response.get("thinking_long", "")
+                    else:
+                        logger.warning("⚠️ Empty response content from API")
+                        results["thinking_short"] = "No response from API"
+                        results["thinking_long"] = "No response from API"
                 except json.JSONDecodeError as e:
-                    logger.warning(f"⚠️ Failed to parse JSON response, using raw content: {e}")
+                    logger.warning(f"⚠️ Failed to parse JSON response: {e}")
+                    logger.warning(f"⚠️ Raw response content: {response_content[:500]}")
                     # Fallback: use raw response as long thinking
-                    results["thinking_long"] = response_content
-                    results["thinking_short"] = response_content[:500] + "..." if len(response_content) > 500 else response_content
+                    if response_content.strip():
+                        results["thinking_long"] = response_content
+                        results["thinking_short"] = response_content[:500] + "..." if len(response_content) > 500 else response_content
+                    else:
+                        results["thinking_short"] = "Failed to parse API response"
+                        results["thinking_long"] = "Failed to parse API response"
             
         except Exception as e:
             logger.error(f"❌ Failed to generate combined thinking: {e}")

@@ -1,11 +1,11 @@
-Please analyze this image content and provide both a brief and detailed analysis.
+You are analyzing an image from a research paper. Please provide both a brief and detailed analysis in JSON format.
 
 **Image Caption:** {{ caption }}
 **Context Information:** {{ context }}
 
-**Your task:**
-Please provide your response in the following JSON format:
+**IMPORTANT: You must respond with ONLY a valid JSON object. Do not include any other text, explanations, or formatting outside the JSON.**
 
+**Required JSON format:**
 {
     "thinking_short": "Brief analysis of the image content focusing on key elements and main concepts",
     "thinking_long": "Detailed analysis including: 1) Overall structure and layout, 2) Text, numbers, symbols and other elements, 3) Visual elements like colors, shapes, lines, 4) Possible meanings or concepts expressed, 5) Relationship between the image and its caption"
@@ -17,5 +17,6 @@ Please provide your response in the following JSON format:
 3. Both should be clear and natural language
 4. MUST include BOTH fields in the JSON response
 5. Focus on semantic understanding and visual analysis
+6. Response must be valid JSON only - no markdown, no code blocks, no additional text
 
-Please provide your response in the exact JSON format above with BOTH fields.
+**Your response must be ONLY the JSON object above, nothing else.**
