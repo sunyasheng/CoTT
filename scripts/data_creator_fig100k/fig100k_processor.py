@@ -228,7 +228,7 @@ class Fig100kProcessor:
         
         return results
     
-    def process_single_item(self, item: Dict[str, Any], item_index: int) -> Dict[str, Any]:
+    def process_single_item(self, item: Dict[str, Any], item_index: int, output_dir: Path) -> Dict[str, Any]:
         """Process single fig100k data item"""
         start_time = time.time()
         
@@ -240,6 +240,31 @@ class Fig100kProcessor:
             "training_data": None,
             "judge_data": None
         }
+        
+        # Check if output files already exist
+        figure_id = item.get("figure_id", f"item_{item_index}")
+        training_file = output_dir / f"{figure_id}_training.json"
+        judge_file = output_dir / f"{figure_id}_judge.json"
+        
+        if self.skip_existing and training_file.exists() and judge_file.exists():
+            try:
+                # Load existing data
+                with open(training_file, 'r', encoding='utf-8') as f:
+                    training_data = json.load(f)
+                with open(judge_file, 'r', encoding='utf-8') as f:
+                    judge_data = json.load(f)
+                
+                result["status"] = "skipped"
+                result["training_data"] = training_data
+                result["judge_data"] = judge_data
+                result["end_time"] = datetime.now().isoformat()
+                result["processing_time"] = time.time() - start_time
+                
+                logger.info(f"⏭️ Skipped item {item_index} (files already exist): {figure_id}")
+                return result
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load existing files for {figure_id}, will reprocess: {e}")
         
         try:
             # Extract basic information from fig100k format
@@ -329,7 +354,10 @@ class Fig100kProcessor:
             result["judge_data"] = judge_data
             result["status"] = "completed"
             
-            logger.info(f"✅ Completed processing item {item_index}")
+            # Save individual files immediately
+            self.save_single_item_files(training_data, judge_data, output_dir, figure_id)
+            
+            logger.info(f"✅ Completed processing item {item_index}: {figure_id}")
             
         except Exception as e:
             result["status"] = "failed"
@@ -340,6 +368,24 @@ class Fig100kProcessor:
         result["processing_time"] = time.time() - start_time
         
         return result
+    
+    def save_single_item_files(self, training_data: Dict, judge_data: Dict, output_dir: Path, figure_id: str):
+        """Save individual training and judge data files for a single item"""
+        try:
+            # Save training data
+            training_file = output_dir / f"{figure_id}_training.json"
+            with open(training_file, 'w', encoding='utf-8') as f:
+                json.dump(training_data, f, ensure_ascii=False, indent=2)
+            
+            # Save judge data
+            judge_file = output_dir / f"{figure_id}_judge.json"
+            with open(judge_file, 'w', encoding='utf-8') as f:
+                json.dump(judge_data, f, ensure_ascii=False, indent=2)
+            
+            logger.debug(f"💾 Saved individual files for {figure_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to save individual files for {figure_id}: {e}")
     
     def load_fig100k_data(self, json_path: str) -> List[Dict[str, Any]]:
         """Load fig100k dataset"""
@@ -381,7 +427,7 @@ class Fig100kProcessor:
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all tasks
             future_to_index = {
-                executor.submit(self.process_single_item, item, i): i 
+                executor.submit(self.process_single_item, item, i, output_path): i 
                 for i, item in enumerate(data)
             }
             
@@ -411,7 +457,7 @@ class Fig100kProcessor:
         all_judge_data = []
         
         for result in results:
-            if result["status"] == "completed":
+            if result["status"] in ["completed", "skipped"]:
                 all_training_data.append(result["training_data"])
                 all_judge_data.append(result["judge_data"])
         
@@ -421,14 +467,17 @@ class Fig100kProcessor:
         # Generate statistics
         total_time = time.time() - start_time
         successful_items = len([r for r in results if r["status"] == "completed"])
+        skipped_items = len([r for r in results if r["status"] == "skipped"])
         statistics = {
             "total_items": len(data),
             "successful_items": successful_items,
+            "skipped_items": skipped_items,
             "failed_items": len(failed_items),
             "total_training_items": len(all_training_data),
             "total_judge_items": len(all_judge_data),
             "total_processing_time": total_time,
-            "average_time_per_item": total_time / len(data) if data else 0
+            "average_time_per_item": total_time / len(data) if data else 0,
+            "skip_existing_enabled": self.skip_existing
         }
         
         logger.info(f"🎉 Parallel processing completed!")
@@ -470,11 +519,13 @@ def main():
     parser.add_argument("--output_dir", "-o", required=True, help="Output directory")
     parser.add_argument("--workers", "-w", type=int, default=4, help="Number of parallel worker threads")
     parser.add_argument("--max_items", "-m", type=int, help="Maximum number of items to process (for testing)")
+    parser.add_argument("--no-skip-existing", action="store_true", 
+                       help="Disable skipping existing files, force reprocess all items")
     
     args = parser.parse_args()
     
     # Create processor
-    processor = Fig100kProcessor(max_workers=args.workers)
+    processor = Fig100kProcessor(max_workers=args.workers, skip_existing=not args.no_skip_existing)
     
     # Start processing
     result = processor.process_parallel(args.input_json, args.output_dir, max_items=args.max_items)
