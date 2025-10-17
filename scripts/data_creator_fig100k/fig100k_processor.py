@@ -241,10 +241,23 @@ class Fig100kProcessor:
             "judge_data": None
         }
         
+        # Extract basic information from fig100k format
+        figure_id = item.get("figure_id", "")
+        captions = item.get("captions", [])
+        captions_norm = item.get("captions_norm", [])
+        
+        # Find the actual image file to get the image name
+        image_path = self.find_image_file(figure_id)
+        if image_path:
+            # Use image filename (without extension) as prefix
+            image_name = Path(image_path).stem
+        else:
+            # Fallback to figure_id if image not found
+            image_name = figure_id or f"item_{item_index}"
+        
         # Check if output files already exist
-        figure_id = item.get("figure_id", f"item_{item_index}")
-        training_file = output_dir / f"{figure_id}_training.json"
-        judge_file = output_dir / f"{figure_id}_judge.json"
+        training_file = output_dir / f"{image_name}_training.json"
+        judge_file = output_dir / f"{image_name}_judge.json"
         
         if self.skip_existing and training_file.exists() and judge_file.exists():
             try:
@@ -260,17 +273,14 @@ class Fig100kProcessor:
                 result["end_time"] = datetime.now().isoformat()
                 result["processing_time"] = time.time() - start_time
                 
-                logger.info(f"⏭️ Skipped item {item_index} (files already exist): {figure_id}")
+                logger.info(f"⏭️ Skipped item {item_index} (files already exist): {image_name}")
                 return result
                 
             except Exception as e:
-                logger.warning(f"⚠️ Failed to load existing files for {figure_id}, will reprocess: {e}")
+                logger.warning(f"⚠️ Failed to load existing files for {image_name}, will reprocess: {e}")
         
         try:
-            # Extract basic information from fig100k format
-            figure_id = item.get("figure_id", "")
-            captions = item.get("captions", [])
-            captions_norm = item.get("captions_norm", [])
+            # Extract additional information
             aspect = item.get("aspect", 1.0)
             
             # Use the first caption as the main caption, or normalized caption if no captions
@@ -284,9 +294,6 @@ class Fig100kProcessor:
                 result["status"] = "failed"
                 result["error"] = "Missing captions"
                 return result
-            
-            # Find the actual image file
-            image_path = self.find_image_file(figure_id)
             
             if not figure_id:
                 result["status"] = "failed"
@@ -355,9 +362,9 @@ class Fig100kProcessor:
             result["status"] = "completed"
             
             # Save individual files immediately
-            self.save_single_item_files(training_data, judge_data, output_dir, figure_id)
+            self.save_single_item_files(training_data, judge_data, output_dir, image_name)
             
-            logger.info(f"✅ Completed processing item {item_index}: {figure_id}")
+            logger.info(f"✅ Completed processing item {item_index}: {image_name}")
             
         except Exception as e:
             result["status"] = "failed"
@@ -369,23 +376,23 @@ class Fig100kProcessor:
         
         return result
     
-    def save_single_item_files(self, training_data: Dict, judge_data: Dict, output_dir: Path, figure_id: str):
+    def save_single_item_files(self, training_data: Dict, judge_data: Dict, output_dir: Path, image_name: str):
         """Save individual training and judge data files for a single item"""
         try:
             # Save training data
-            training_file = output_dir / f"{figure_id}_training.json"
+            training_file = output_dir / f"{image_name}_training.json"
             with open(training_file, 'w', encoding='utf-8') as f:
                 json.dump(training_data, f, ensure_ascii=False, indent=2)
             
             # Save judge data
-            judge_file = output_dir / f"{figure_id}_judge.json"
+            judge_file = output_dir / f"{image_name}_judge.json"
             with open(judge_file, 'w', encoding='utf-8') as f:
                 json.dump(judge_data, f, ensure_ascii=False, indent=2)
             
-            logger.debug(f"💾 Saved individual files for {figure_id}")
+            logger.debug(f"💾 Saved individual files for {image_name}")
             
         except Exception as e:
-            logger.error(f"❌ Failed to save individual files for {figure_id}: {e}")
+            logger.error(f"❌ Failed to save individual files for {image_name}: {e}")
     
     def load_fig100k_data(self, json_path: str) -> List[Dict[str, Any]]:
         """Load fig100k dataset"""
