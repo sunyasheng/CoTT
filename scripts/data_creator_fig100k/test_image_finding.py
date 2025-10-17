@@ -5,14 +5,7 @@ Test script to verify image file finding works with actual fig100k data
 
 import json
 import os
-import sys
-from pathlib import Path
 from typing import List, Dict, Any
-
-# Add the parent directory to the sys.path to import Fig100kProcessor
-sys.path.append(str(Path(__file__).parent.parent.parent.parent))
-
-from MM_Reasoning.DataPrep_CoTT.scripts.data_creator_fig100k.fig100k_processor import Fig100kProcessor
 
 def test_image_finding():
     """Test image file finding with actual figure_ids from the JSON data"""
