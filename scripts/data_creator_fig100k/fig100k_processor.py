@@ -31,6 +31,10 @@ from datetime import datetime
 import re
 from dotenv import load_dotenv
 
+# 添加prompts_template目录到Python路径
+sys.path.append(os.path.join(os.path.dirname(__file__), 'prompts_template'))
+from prompt_manager import fig100k_prompt_manager
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -158,30 +162,19 @@ class Fig100kProcessor:
             "api-key": self.api_key
         }
         
-        # Build prompts
-        prompt_short = f"Please briefly analyze the content of this image. Image caption: {caption}"
-        prompt_long = f"""Please provide a detailed analysis of this image content, including:
-1. Overall structure and layout of the image
-2. Text, numbers, symbols and other elements in the image
-3. Visual elements like colors, shapes, lines in the image
-4. Possible meanings or concepts expressed by the image
-5. Relationship between the image and its caption
-
-Image caption: {caption}
-Context information: {context}
-
-Please provide a detailed analysis."""
+        # Build combined prompt using external template
+        prompt_combined = fig100k_prompt_manager.get_thinking_combined_prompt(caption, context)
         
         results = {"thinking_short": "", "thinking_long": ""}
         
-        # Generate short thinking
+        # Generate both short and long thinking in one API call
         try:
-            payload_short = {
+            payload = {
                 "messages": [
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": prompt_short},
+                            {"type": "text", "text": prompt_combined},
                             {
                                 "type": "image_url",
                                 "image_url": {"url": f"data:image/png;base64,{base64_image}"}
@@ -189,42 +182,28 @@ Please provide a detailed analysis."""
                         ]
                     }
                 ],
-                "max_tokens": 500,
+                "max_tokens": 3000,  # Increased to accommodate both responses
                 "temperature": 0.1
             }
             
-            data_short = self.make_api_request_with_retry(url, headers, payload_short, max_retries=2, delay=1.0, timeout=30)
-            if "error" not in data_short:
-                results["thinking_short"] = data_short.get("choices", [{}])[0].get("message", {}).get("content", "")
+            data = self.make_api_request_with_retry(url, headers, payload, max_retries=2, delay=1.0, timeout=60)
+            if "error" not in data:
+                response_content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                
+                # Parse JSON response
+                try:
+                    import json
+                    parsed_response = json.loads(response_content)
+                    results["thinking_short"] = parsed_response.get("thinking_short", "")
+                    results["thinking_long"] = parsed_response.get("thinking_long", "")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ Failed to parse JSON response, using raw content: {e}")
+                    # Fallback: use raw response as long thinking
+                    results["thinking_long"] = response_content
+                    results["thinking_short"] = response_content[:500] + "..." if len(response_content) > 500 else response_content
             
         except Exception as e:
-            logger.error(f"❌ Failed to generate short thinking: {e}")
-        
-        # Generate long thinking
-        try:
-            payload_long = {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt_long},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{base64_image}"}
-                            }
-                        ]
-                    }
-                ],
-                "max_tokens": 1500,
-                "temperature": 0.1
-            }
-            
-            data_long = self.make_api_request_with_retry(url, headers, payload_long, max_retries=2, delay=1.0, timeout=30)
-            if "error" not in data_long:
-                results["thinking_long"] = data_long.get("choices", [{}])[0].get("message", {}).get("content", "")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to generate long thinking: {e}")
+            logger.error(f"❌ Failed to generate combined thinking: {e}")
         
         return results
     
