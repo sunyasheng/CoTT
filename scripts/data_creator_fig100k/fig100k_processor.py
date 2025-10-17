@@ -287,44 +287,43 @@ Please provide a detailed analysis."""
             diagram_short = caption
             diagram_long = f"{caption}\n\nContext: {context}" if context else caption
             
-            # Build training_data format
-            training_data = {
-                "stage2_input": {
-                    "diagram_description_short": diagram_short,
-                    "diagram_description_long": diagram_long
-                },
-                "stage2_output": {
-                    "thinking_short": thinking_results["thinking_short"],
-                    "thinking_long": thinking_results["thinking_long"]
-                },
-                "metadata": {
-                    "source": "fig100k",
-                    "figure_id": figure_id,
-                    "original_captions": captions,
-                    "original_captions_norm": captions_norm,
-                    "aspect": aspect,
-                    "image_path": image_path,
-                    "processed_time": datetime.now().isoformat()
+                # Build training_data format (matching diagram_training_data.json structure)
+                training_data = {
+                    "data_quality": "valid",
+                    "quality_issues": [],
+                    "stage1_input": {
+                        "context": context if context else caption,
+                        "caption": caption
+                    },
+                    "stage2_input": {
+                        "diagram_description_short": diagram_short,
+                        "diagram_description_long": diagram_long
+                    },
+                    "stage2_output": {
+                        "thinking_short": thinking_results["thinking_short"],
+                        "thinking_long": thinking_results["thinking_long"],
+                        "image_path": image_path
+                    }
                 }
-            }
             
-            # Build judge_data format (for quality assessment)
-            judge_data = {
-                "diagram_description_short": diagram_short,
-                "diagram_description_long": diagram_long,
-                "thinking_short": thinking_results["thinking_short"],
-                "thinking_long": thinking_results["thinking_long"],
-                "quality_score": 1.0,  # Default quality score
-                "metadata": {
-                    "source": "fig100k",
-                    "figure_id": figure_id,
-                    "original_captions": captions,
-                    "original_captions_norm": captions_norm,
-                    "aspect": aspect,
-                    "image_path": image_path,
-                    "processed_time": datetime.now().isoformat()
+                # Build judge_data format (matching diagram_training_data.json structure)
+                judge_data = {
+                    "data_quality": "valid",
+                    "quality_issues": [],
+                    "stage1_input": {
+                        "context": context if context else caption,
+                        "caption": caption
+                    },
+                    "stage2_input": {
+                        "diagram_description_short": diagram_short,
+                        "diagram_description_long": diagram_long
+                    },
+                    "stage2_output": {
+                        "thinking_short": thinking_results["thinking_short"],
+                        "thinking_long": thinking_results["thinking_long"],
+                        "image_path": image_path
+                    }
                 }
-            }
             
             result["training_data"] = training_data
             result["judge_data"] = judge_data
