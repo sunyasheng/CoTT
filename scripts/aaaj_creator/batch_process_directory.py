@@ -13,9 +13,11 @@ import sys
 from pathlib import Path
 from diagram_parse_graph_creator import DiagramParseGraphCreator
 import json
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from tqdm import tqdm
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 def find_original_images(input_dir: str, max_images: int = None) -> List[Path]:
     """查找所有原图（排除 _reconstructed 图片）"""
@@ -36,10 +38,49 @@ def find_original_images(input_dir: str, max_images: int = None) -> List[Path]:
     
     return sorted(images)
 
+def process_single_image(args: Tuple[Path, Path, Dict]) -> Dict:
+    """处理单张图片（用于并发处理）"""
+    image_path, output_file, api_config = args
+    
+    # 为每个线程创建独立的 creator（确保线程安全）
+    creator = DiagramParseGraphCreator(
+        api_key=api_config.get("api_key"),
+        api_base=api_config.get("api_base"),
+        api_type=api_config.get("api_type", "azure")
+    )
+    
+    try:
+        # 处理图片
+        result = creator.analyze_diagram(str(image_path), str(output_file))
+        
+        # 提取统计信息
+        dpg = result.get("dpg", {})
+        constituents = dpg.get("constituents", {})
+        relationships = dpg.get("relationships", {})
+        
+        return {
+            "image": str(image_path),
+            "output": str(output_file),
+            "status": "success",
+            "blobs": len(constituents.get("blobs", [])),
+            "text_boxes": len(constituents.get("text_boxes", [])),
+            "arrows": len(constituents.get("arrows", [])),
+            "arrow_heads": len(constituents.get("arrow_heads", [])),
+            "relationships": {k: len(v) for k, v in relationships.items() if v}
+        }
+    except Exception as e:
+        return {
+            "image": str(image_path),
+            "output": str(output_file),
+            "status": "failed",
+            "error": str(e)
+        }
+
 def process_images_batch(images: List[Path], creator: DiagramParseGraphCreator, 
                          output_base_dir: str, batch_size: int = 100,
-                         start_idx: int = 0, max_images: int = None) -> Dict:
-    """批量处理图片，支持分批处理"""
+                         start_idx: int = 0, max_images: int = None,
+                         num_workers: int = 1) -> Dict:
+    """批量处理图片，支持并发处理"""
     
     if max_images:
         images = images[:max_images]
@@ -52,74 +93,89 @@ def process_images_batch(images: List[Path], creator: DiagramParseGraphCreator,
         "details": []
     }
     
-    print(f"📊 Processing {total} images (batch size: {batch_size})")
+    print(f"📊 Processing {total} images (batch size: {batch_size}, workers: {num_workers})")
     print(f"Starting from index: {start_idx}")
     
     # 创建输出目录
     output_path = Path(output_base_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # 使用 tqdm 显示进度
-    for i in tqdm(range(start_idx, total), desc="Processing images", initial=start_idx, total=total):
-        image_path = images[i]
+    # 准备 API 配置（用于创建独立的 creator）
+    # 从环境变量或 creator 获取配置
+    api_config = {
+        "api_key": getattr(creator, 'api_key', None) or (os.getenv("AZURE_OPENAI_API_KEY") if creator.api_type == "azure" else os.getenv("OPENAI_API_KEY")),
+        "api_base": getattr(creator, 'api_base', None) or os.getenv("AZURE_OPENAI_ENDPOINT", ""),
+        "api_type": getattr(creator, 'api_type', 'azure')
+    }
+    
+    # 准备任务列表
+    tasks = []
+    for i, image_path in enumerate(images):
+        # 确定输出路径：保持相对目录结构
+        relative_path = image_path.relative_to(image_path.parents[len(image_path.parents)-1])
+        output_file = output_path / relative_path.parent / f"{image_path.stem}_dpg.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         
-        try:
-            # 确定输出路径：保持相对目录结构
-            relative_path = image_path.relative_to(image_path.parents[len(image_path.parents)-1])
-            output_file = output_path / relative_path.parent / f"{image_path.stem}_dpg.json"
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 跳过已存在的文件
-            if output_file.exists():
-                print(f"\n⏭️  Skipping {image_path.name} (already exists)")
-                results["success"] += 1
-                results["details"].append({
-                    "image": str(image_path),
-                    "output": str(output_file),
-                    "status": "skipped",
-                    "blobs": 0,
-                    "text_boxes": 0,
-                    "arrows": 0
-                })
-                continue
-            
-            # 处理图片
-            result = creator.analyze_diagram(str(image_path), str(output_file))
-            
-            # 提取统计信息
-            dpg = result.get("dpg", {})
-            constituents = dpg.get("constituents", {})
-            relationships = dpg.get("relationships", {})
-            
-            stats = {
-                "image": str(image_path),
-                "output": str(output_file),
-                "status": "success",
-                "blobs": len(constituents.get("blobs", [])),
-                "text_boxes": len(constituents.get("text_boxes", [])),
-                "arrows": len(constituents.get("arrows", [])),
-                "arrow_heads": len(constituents.get("arrow_heads", [])),
-                "relationships": {k: len(v) for k, v in relationships.items() if v}
-            }
-            
+        # 跳过已存在的文件
+        if output_file.exists():
             results["success"] += 1
-            results["details"].append(stats)
-            
-            # 每处理一定数量后保存中间结果
-            if (i + 1) % batch_size == 0:
-                summary_file = output_path / f"batch_summary_checkpoint_{i+1}.json"
-                with open(summary_file, 'w', encoding='utf-8') as f:
-                    json.dump(results, f, indent=2, ensure_ascii=False)
-                print(f"\n💾 Checkpoint saved at {i+1} images")
-            
-        except Exception as e:
-            print(f"\n❌ Failed {image_path.name}: {e}")
-            results["failed"] += 1
             results["details"].append({
                 "image": str(image_path),
-                "status": "failed",
-                "error": str(e)
+                "output": str(output_file),
+                "status": "skipped",
+                "blobs": 0,
+                "text_boxes": 0,
+                "arrows": 0
             })
+            continue
+        
+        tasks.append((image_path, output_file, api_config))
+    
+    # 使用线程池并发处理
+    processed_count = 0
+    lock = threading.Lock()
+    
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        # 提交所有任务
+        future_to_task = {executor.submit(process_single_image, task): task for task in tasks}
+        
+        # 使用 tqdm 显示进度
+        with tqdm(total=len(tasks), desc="Processing images", initial=processed_count) as pbar:
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                image_path = task[0]
+                
+                try:
+                    result = future.result()
+                    
+                    with lock:
+                        if result["status"] == "success":
+                            results["success"] += 1
+                        else:
+                            results["failed"] += 1
+                        results["details"].append(result)
+                        processed_count += 1
+                        
+                        # 每处理一定数量后保存中间结果
+                        if processed_count % batch_size == 0:
+                            summary_file = output_path / f"batch_summary_checkpoint_{processed_count}.json"
+                            with open(summary_file, 'w', encoding='utf-8') as f:
+                                json.dump(results, f, indent=2, ensure_ascii=False)
+                            pbar.write(f"💾 Checkpoint saved at {processed_count} images")
+                        
+                        pbar.update(1)
+                        
+                except Exception as e:
+                    with lock:
+                        results["failed"] += 1
+                        results["details"].append({
+                            "image": str(image_path),
+                            "status": "failed",
+                            "error": str(e)
+                        })
+                        processed_count += 1
+                        pbar.update(1)
+                        pbar.write(f"❌ Failed {image_path.name}: {e}")
     
     return results
 
@@ -204,6 +260,13 @@ Examples:
         help='Path to save final summary JSON file'
     )
     
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=5,
+        help='Number of concurrent workers (default: 5, set to 1 for serial processing)'
+    )
+    
     args = parser.parse_args()
     
     # 查找所有原图
@@ -240,7 +303,8 @@ Examples:
         args.output_dir,
         batch_size=args.batch_size,
         start_idx=0,  # images already sliced
-        max_images=args.max_images
+        max_images=args.max_images,
+        num_workers=args.workers
     )
     
     elapsed_time = time.time() - start_time
