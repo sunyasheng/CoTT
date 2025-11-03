@@ -77,7 +77,8 @@ def process_single_image(args: Tuple[Path, Path, Dict]) -> Dict:
         }
 
 def process_images_batch(images: List[Path], creator: DiagramParseGraphCreator, 
-                         output_base_dir: str, batch_size: int = 100,
+                         output_base_dir: str, input_base_dir: str,
+                         batch_size: int = 100,
                          start_idx: int = 0, max_images: int = None,
                          num_workers: int = 1) -> Dict:
     """批量处理图片，支持并发处理"""
@@ -100,6 +101,9 @@ def process_images_batch(images: List[Path], creator: DiagramParseGraphCreator,
     output_path = Path(output_base_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
+    # 输入目录路径（用于计算相对路径）
+    input_base_path = Path(input_base_dir).resolve()
+    
     # 准备 API 配置（用于创建独立的 creator）
     # 从环境变量或 creator 获取配置
     api_config = {
@@ -111,9 +115,16 @@ def process_images_batch(images: List[Path], creator: DiagramParseGraphCreator,
     # 准备任务列表
     tasks = []
     for i, image_path in enumerate(images):
-        # 确定输出路径：保持相对目录结构
-        relative_path = image_path.relative_to(image_path.parents[len(image_path.parents)-1])
-        output_file = output_path / relative_path.parent / f"{image_path.stem}_dpg.json"
+        # 确定输出路径：相对于输入目录保持目录结构
+        try:
+            # 计算相对于输入目录的路径
+            relative_path = Path(image_path).resolve().relative_to(input_base_path)
+            # 输出文件：保持相对路径结构，但文件名改为 _dpg.json
+            output_file = output_path / relative_path.parent / f"{image_path.stem}_dpg.json"
+        except ValueError:
+            # 如果无法计算相对路径（不在同一个根目录下），直接放在输出目录
+            output_file = output_path / f"{image_path.stem}_dpg.json"
+        
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
         # 跳过已存在的文件
@@ -301,6 +312,7 @@ Examples:
         images, 
         creator, 
         args.output_dir,
+        args.input_dir,  # 传递输入目录用于计算相对路径
         batch_size=args.batch_size,
         start_idx=0,  # images already sliced
         max_images=args.max_images,
