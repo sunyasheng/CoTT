@@ -16,7 +16,12 @@ GPUS=(0 1 2 3)  # GPU IDs to use
 PDFS_PER_GPU=10000  # Number of PDFs each GPU processes
 TOTAL_PDFS=40000  # Total: 4 GPUs × 10,000 PDFs
 
+# Get the full path to python (to ensure we use the correct environment)
+PYTHON_BIN="$(which python)"
+
 echo "Starting batch processing on ${#GPUS[@]} GPUs"
+echo "Python: ${PYTHON_BIN}"
+echo "Script: ${PYTHON_SCRIPT}"
 echo "Each GPU will process ${PDFS_PER_GPU} PDFs"
 echo "Total: ${TOTAL_PDFS} PDFs"
 echo "================================"
@@ -36,11 +41,23 @@ for i in "${!GPUS[@]}"; do
     echo "GPU ${GPU_ID}: Processing PDFs ${START} to ${END}"
     echo "  Log: ${LOG_FILE}"
     
+    # Write startup info to log
+    {
+        echo "==================================="
+        echo "Starting GPU ${GPU_ID}"
+        echo "Python: ${PYTHON_BIN}"
+        echo "Script: ${PYTHON_SCRIPT}"
+        echo "Range: ${START} to ${END}"
+        echo "CUDA_VISIBLE_DEVICES: ${GPU_ID}"
+        echo "Started at: $(date)"
+        echo "==================================="
+    } > "${LOG_FILE}"
+    
     # Run in background with specific GPU
-    CUDA_VISIBLE_DEVICES=${GPU_ID} python "${PYTHON_SCRIPT}" \
+    CUDA_VISIBLE_DEVICES=${GPU_ID} "${PYTHON_BIN}" -u "${PYTHON_SCRIPT}" \
         --start ${START} \
         --end ${END} \
-        > "${LOG_FILE}" 2>&1 &
+        >> "${LOG_FILE}" 2>&1 &
     
     # Store PID
     PIDS[$i]=$!
