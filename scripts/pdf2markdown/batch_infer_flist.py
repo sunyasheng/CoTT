@@ -68,7 +68,9 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
         # Call MinerU on each PDF individually to avoid issues with different directory structures
         failures = 0
         for i, pdf_path in enumerate(remaining_pdfs, 1):
+            print(f"\n{'='*60}")
             print(f"[{i}/{len(remaining_pdfs)}] Processing {pdf_path.name}...")
+            print(f"{'='*60}")
             
             cmd = [
                 "mineru",
@@ -83,12 +85,24 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
                 "--f_dump_orig_pdf", "False"  # 禁用 original PDF 生成
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            print(f"Running: {' '.join(cmd)}")
+            
+            # Don't capture output - let it display in real-time
+            result = subprocess.run(cmd)
+            
+            # Check if output file was actually created
+            pdf_stem = pdf_path.stem
+            expected_md_file = out_dir / pdf_stem / "vlm" / f"{pdf_stem}.md"
+            
             if result.returncode != 0:
-                print(f"ERROR: MinerU CLI failed for {pdf_path.name}: {result.stderr}", file=sys.stderr)
+                print(f"\n❌ ERROR: MinerU CLI failed for {pdf_path.name} (exit code: {result.returncode})", file=sys.stderr)
+                failures += 1
+            elif not expected_md_file.exists():
+                print(f"\n⚠️  WARNING: MinerU returned success but output file not found: {expected_md_file}", file=sys.stderr)
                 failures += 1
             else:
-                print(f"SUCCESS: {pdf_path.name}")
+                file_size = expected_md_file.stat().st_size
+                print(f"\n✅ SUCCESS: {pdf_path.name} -> {expected_md_file} ({file_size} bytes)")
         
         return failures
         
