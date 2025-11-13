@@ -103,6 +103,7 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
             else:
                 file_size = expected_md_file.stat().st_size
                 print(f"\n✅ SUCCESS: {pdf_path.name} -> {expected_md_file} ({file_size} bytes)")
+                sys.stdout.flush()  # Flush output for real-time monitoring
         
         return failures
         
