@@ -8,27 +8,33 @@ from pathlib import Path
 from typing import List
 
 
-def read_flist(flist_path: Path, pdf_root: Path) -> List[Path]:
-    """Read PDF paths from flist file and convert to absolute paths"""
+def read_flist_range(flist_path: Path, pdf_root: Path, start: int, end: int) -> List[Path]:
+    """Read PDF paths from flist file within specified range (1-based, inclusive)"""
     if not flist_path.exists():
         raise FileNotFoundError(f"Flist file not found: {flist_path}")
     
     pdf_paths = []
+    print(f"Reading flist lines {start} to {end}...")
+    
     with open(flist_path, 'r') as f:
-        for line in f:
+        for idx, line in enumerate(f, 1):
+            # Skip lines before start
+            if idx < start:
+                continue
+            # Stop after end
+            if idx > end:
+                break
+            
             line = line.strip()
             if line:
                 # Convert relative path to absolute path
                 pdf_path = pdf_root / line
-                if pdf_path.exists():
-                    pdf_paths.append(pdf_path)
-                else:
-                    print(f"Warning: PDF not found: {pdf_path}")
+                pdf_paths.append(pdf_path)
     
     if not pdf_paths:
-        raise FileNotFoundError(f"No valid PDFs found from flist: {flist_path}")
+        raise FileNotFoundError(f"No valid PDFs found from flist lines {start}-{end}")
     
-    print(f"Loaded {len(pdf_paths)} PDFs from flist")
+    print(f"Loaded {len(pdf_paths)} PDFs from flist (lines {start}-{end})")
     return pdf_paths
 
 
@@ -123,17 +129,14 @@ def main() -> None:
     out_dir = Path(args.outdir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Read all PDFs from flist
-    all_pdfs = read_flist(flist_path, root_dir)
-
-    if args.start < 1 or args.end < args.start or args.end > len(all_pdfs):
-        print(f"Invalid range: start={args.start}, end={args.end}, total={len(all_pdfs)}", file=sys.stderr)
+    # Validate range
+    if args.start < 1 or args.end < args.start:
+        print(f"Invalid range: start={args.start}, end={args.end}", file=sys.stderr)
         sys.exit(2)
 
-    # Select the range
-    sel = all_pdfs[args.start - 1: args.end]
-    print(f"Processing PDFs from flist: indices [{args.start}..{args.end}] -> {len(sel)} files")
-    print("Processing PDFs directly without temporary directory")
+    # Read only the specified range from flist (much faster for large files)
+    sel = read_flist_range(flist_path, root_dir, args.start, args.end)
+    print(f"Processing {len(sel)} PDFs directly without temporary directory")
 
     # Process the selected PDFs
     failures = process_pdfs_batch(sel, out_dir)
