@@ -101,7 +101,7 @@ def main() -> None:
         print(f"Warning: Config file not found at {config_path}")
     
     default_pdf_root = Path("/blob/yasheng/arxiv_dataset/pdf/")
-    default_out_dir = Path("/blob/yasheng/arxiv_dataset/md/")
+    default_out_dir = Path("/blob/yasheng/arxiv_dataset/md_batch2/")
     default_flist = Path(__file__).parent.parent / "flists" / "arxiv_pdf_remaining.list"
 
     parser = argparse.ArgumentParser(description="Batch run MinerU over PDFs from a flist file")
