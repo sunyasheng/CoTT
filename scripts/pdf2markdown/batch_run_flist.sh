@@ -13,9 +13,14 @@ PYTHON_SCRIPT="${SCRIPT_DIR}/batch_infer_flist.py"
 
 # Configuration
 # Define explicit GPU → start/end mappings for clarity
-GPUS=(0 1 2 3 4 5 6 7)                    # GPU IDs to use
-STARTS=(1 10001 20001 30001 40001 50001 60001 70001)  # Starting PDF indices per GPU
-ENDS=(10000 20000 30000 40000 50000 60000 70000 80000) # Ending PDF indices per GPU
+# GPUS=(0 1 2 3 4 5 6 7)                    # GPU IDs to use
+# STARTS=(1 10001 20001 30001 40001 50001 60001 70001)  # Starting PDF indices per GPU
+# ENDS=(10000 20000 30000 40000 50000 60000 70000 80000) # Ending PDF indices per GPU
+
+GPUS=(0 1 2 3)                    # GPU IDs to use
+STARTS=(1 10001 20001 30001)  # Starting PDF indices per GPU
+ENDS=(10000 20000 30000 40000) # Ending PDF indices per GPU
+
 OFFSET=${1:-0}  # Optional bias added to every START/END (can be negative)
 
 if [[ ${#GPUS[@]} -ne ${#STARTS[@]} || ${#GPUS[@]} -ne ${#ENDS[@]} ]]; then
