@@ -42,10 +42,16 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
     """Process multiple PDFs in a single MinerU CLI call to avoid model reloading"""
     try:
         # Filter out already processed PDFs
+        print(f"Checking which PDFs are already processed (total: {len(pdf_paths)})...")
         remaining_pdfs = []
         skipped = 0
         
-        for pdf_path in pdf_paths:
+        for idx, pdf_path in enumerate(pdf_paths, 1):
+            # Print progress every 1000 files or at key milestones
+            if idx == 1 or idx % 1000 == 0 or idx == len(pdf_paths):
+                print(f"Checking progress: {idx}/{len(pdf_paths)} (found {skipped} already processed, {len(remaining_pdfs)} to process)...")
+                sys.stdout.flush()
+            
             # Check if corresponding markdown output already exists
             # PDF: /path/to/2104.03057/2104.03057v1.pdf -> MD: /outdir/2104.03057v1/vlm/2104.03057v1.md
             pdf_stem = pdf_path.stem  # e.g., "2104.03057v1"
@@ -53,16 +59,21 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
             expected_md_file = expected_md_dir / f"{pdf_stem}.md"
             
             if expected_md_file.exists():
-                print(f"SKIP {pdf_path.name} -> {expected_md_file} (already processed)")
+                if idx <= 10 or idx % 1000 == 0:  # Only print skip messages for first 10 or every 1000th
+                    print(f"SKIP {pdf_path.name} -> {expected_md_file} (already processed)")
                 skipped += 1
             else:
                 remaining_pdfs.append(pdf_path)
+        
+        print(f"Finished checking: {skipped} already processed, {len(remaining_pdfs)} need processing")
+        sys.stdout.flush()
         
         if not remaining_pdfs:
             print(f"All {len(pdf_paths)} PDFs already processed, skipping batch")
             return 0
         
         print(f"Processing {len(remaining_pdfs)}/{len(pdf_paths)} PDFs ({skipped} skipped)")
+        sys.stdout.flush()
         
         # Process PDFs directly without copying to temp directory
         # Call MinerU on each PDF individually to avoid issues with different directory structures
@@ -71,6 +82,7 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
             print(f"\n{'='*60}")
             print(f"[{i}/{len(remaining_pdfs)}] Processing {pdf_path.name}...")
             print(f"{'='*60}")
+            sys.stdout.flush()
             
             cmd = [
                 "mineru",
@@ -86,6 +98,9 @@ def process_pdfs_batch(pdf_paths: List[Path], out_dir: Path) -> int:
             ]
             
             print(f"Running: {' '.join(cmd)}")
+            if i == 1:
+                print("NOTE: First PDF may take longer due to model loading (vlm-vllm-engine initialization)...")
+            sys.stdout.flush()
             
             # Don't capture output - let it display in real-time
             result = subprocess.run(cmd)
@@ -150,8 +165,13 @@ def main() -> None:
         sys.exit(2)
 
     # Read only the specified range from flist (much faster for large files)
+    print(f"Reading PDF list from flist (lines {args.start}-{args.end})...")
+    sys.stdout.flush()
     sel = read_flist_range(flist_path, root_dir, args.start, args.end)
-    print(f"Processing {len(sel)} PDFs directly without temporary directory")
+    print(f"Loaded {len(sel)} PDFs from flist")
+    print(f"Output directory: {out_dir}")
+    print(f"Starting batch processing...")
+    sys.stdout.flush()
 
     # Process the selected PDFs
     failures = process_pdfs_batch(sel, out_dir)
