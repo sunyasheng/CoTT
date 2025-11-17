@@ -126,14 +126,26 @@ def main():
     print("=" * 70)
     
     with requests.Session() as session:
+        total_papers = len(df)
+        overall_progress = tqdm(total=total_papers, desc="Overall Progress", position=0, leave=True)
+        
         for year in sorted(df['year'].unique()):
             year_papers = df[df['year'] == year]
-            print(f"\nYear {year}: Processing {len(year_papers)} papers")
+            year_count = len(year_papers)
             
-            # Use tqdm for progress bar
-            for idx, row in tqdm(year_papers.iterrows(), total=len(year_papers), desc=f"Year {year}"):
+            # Use tqdm for progress bar with detailed info
+            year_progress = tqdm(
+                year_papers.iterrows(), 
+                total=year_count, 
+                desc=f"Year {year:4d}",
+                position=1,
+                leave=False,
+                unit="paper",
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+            )
+            
+            for idx, row in year_progress:
                 paper_id = row['id']
-                title = row.get('title', 'N/A')[:50]
                 
                 output_path, success, message = download_pdf(
                     paper_id, year, str(output_base_dir), session
@@ -148,10 +160,22 @@ def main():
                     failed += 1
                     # Only print failures to reduce output
                     if failed <= 10 or failed % 100 == 0:
-                        print(f"  ✗ {paper_id}: Failed - {message}")
+                        year_progress.write(f"  ✗ {paper_id}: Failed - {message}")
+                
+                # Update progress bars
+                overall_progress.update(1)
+                year_progress.set_postfix({
+                    'D': downloaded, 
+                    'S': skipped, 
+                    'F': failed
+                })
                 
                 # Small delay to avoid rate limiting
                 time.sleep(0.5)
+            
+            year_progress.close()
+        
+        overall_progress.close()
     
     print("\n" + "=" * 70)
     print(f"Summary:")
