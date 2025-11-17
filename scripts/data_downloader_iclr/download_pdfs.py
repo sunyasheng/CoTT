@@ -104,10 +104,7 @@ def download_pdf(paper_id: str, year: int, output_dir: str, session: requests.Se
 def main():
     # Paths
     parquet_path = Path(__file__).parent.parent.parent / "debug" / "iclr2017_2026" / "iclr26v1.parquet"
-    output_base_dir = Path(__file__).parent.parent.parent / "debug" / "iclr2017_2026" / "pdfs"
-    
-    # Test: Download 10 papers per year
-    papers_per_year = 10
+    output_base_dir = Path("/blob/yasheng/iclr_dataset")
     
     print(f"Loading parquet file: {parquet_path}")
     if not parquet_path.exists():
@@ -120,20 +117,21 @@ def main():
     # Create output directory
     output_base_dir.mkdir(parents=True, exist_ok=True)
     
-    # Group by year and sample papers
+    # Group by year and download all papers
     downloaded = 0
     failed = 0
     skipped = 0
     
-    print(f"\nDownloading {papers_per_year} papers per year for testing...")
+    print(f"\nDownloading ALL papers from parquet file...")
     print("=" * 70)
     
     with requests.Session() as session:
         for year in sorted(df['year'].unique()):
-            year_papers = df[df['year'] == year].head(papers_per_year)
+            year_papers = df[df['year'] == year]
             print(f"\nYear {year}: Processing {len(year_papers)} papers")
             
-            for idx, row in year_papers.iterrows():
+            # Use tqdm for progress bar
+            for idx, row in tqdm(year_papers.iterrows(), total=len(year_papers), desc=f"Year {year}"):
                 paper_id = row['id']
                 title = row.get('title', 'N/A')[:50]
                 
@@ -144,14 +142,13 @@ def main():
                 if success:
                     if message == "already_exists":
                         skipped += 1
-                        print(f"  ✓ {paper_id}: Skipped (already exists)")
                     else:
                         downloaded += 1
-                        file_size = os.path.getsize(output_path) / 1024  # KB
-                        print(f"  ✓ {paper_id}: Downloaded ({file_size:.1f} KB) - {title}")
                 else:
                     failed += 1
-                    print(f"  ✗ {paper_id}: Failed - {message} - {title}")
+                    # Only print failures to reduce output
+                    if failed <= 10 or failed % 100 == 0:
+                        print(f"  ✗ {paper_id}: Failed - {message}")
                 
                 # Small delay to avoid rate limiting
                 time.sleep(0.5)
