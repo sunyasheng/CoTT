@@ -13,7 +13,7 @@ from tqdm import tqdm
 import time
 from urllib.parse import quote
 
-
+### download pdfs: https://raw.githubusercontent.com/berenslab/iclr-dataset/refs/heads/main/data/iclr26v1.parquet
 def get_pdf_url(paper_id: str) -> str:
     """
     Construct OpenReview PDF URL from paper ID.
